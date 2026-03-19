@@ -10,18 +10,6 @@ pipeline {
   }
 
   stages {
-    stage('Checkout') {
-    steps {
-        checkout([
-            $class: 'GitSCM',
-            branches: [[name: '*/main']],
-            userRemoteConfigs: [[
-                url: 'git@github.com:Mekylei-Belchior/base-app.git',
-                credentialsId: 'github-ssh'
-            ]]
-        ])
-       }
-    }
 
     stage('Build Image') {
       steps {
@@ -72,10 +60,6 @@ pipeline {
   }
 
   post {
-    always {
-      // Limpeza
-      sh 'docker image prune -f'
-    }
     success {
       echo "✅ Deploy ${IMAGE_TAG} realizado com sucesso!"
     }
