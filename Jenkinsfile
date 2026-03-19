@@ -11,9 +11,16 @@ pipeline {
 
   stages {
     stage('Checkout') {
-      steps {
-        git branch: 'main', url: 'https://github.com/Mekylei-Belchior/base-app.git'
-      }
+    steps {
+        checkout([
+            $class: 'GitSCM',
+            branches: [[name: '*/main']],
+            userRemoteConfigs: [[
+                url: 'git@github.com:Mekylei-Belchior/base-app.git',
+                credentialsId: 'github-ssh'
+            ]]
+        ])
+       }
     }
 
     stage('Build Image') {
