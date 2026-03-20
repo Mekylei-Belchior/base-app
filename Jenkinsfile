@@ -1,75 +1,105 @@
 pipeline {
-  agent any
-
-  environment {
-    DOCKER_REGISTRY = 'localhost:5000'
-    IMAGE_TAG = "${BUILD_NUMBER}-${GIT_COMMIT.take(7)}"
-    IMAGE_NAME = "app-local:${IMAGE_TAG}"
-    FULL_IMAGE = "${DOCKER_REGISTRY}/app-local:${IMAGE_TAG}"
-    K8S_NAMESPACE = 'default'
-  }
-
-  stages {
-
-    stage('Build Image') {
-      steps {
-        script {
-          docker.build("app-local:${IMAGE_TAG}")
-          
-          // Se tiver um registry local
-          // sh "docker tag app-local:${IMAGE_TAG} ${FULL_IMAGE}"
-          // sh "docker push ${FULL_IMAGE}"
+    agent any
+    
+    environment {
+        // Variáveis úteis
+        IMAGE_TAG = "build-${BUILD_NUMBER}-${GIT_COMMIT ?: 'local'}"
+        IMAGE_NAME = "app-local:${IMAGE_TAG}"
+        K3S_KUBECTL = 'sudo /usr/local/bin/k3s kubectl'
+    }
+    
+    options {
+        // Mostrar timestamp nos logs
+        timestamps()
+        // Mantém os últimos 10 builds
+        buildDiscarder(logRotator(numToKeepStr: '10'))
+    }
+    
+    stages {
+        stage('Checkout') {
+            steps {
+                checkout scm
+                sh 'ls -la'  // Mostra arquivos para debug
+            }
         }
-      }
-    }
-
-    stage('Deploy to k3s') {
-      steps {
-        script {
-          // Aplica as configurações com a nova imagem
-          sh """
-            sed -i 's|image:.*|image: app-local:${IMAGE_TAG}|' deployment.yaml
-            sudo k3s kubectl apply -f deployment.yaml
-            sudo k3s kubectl apply -f service.yaml
-            sudo k3s kubectl apply -f ingress.yaml
-          """
+        
+        stage('Build Docker Image') {
+            steps {
+                script {
+                    docker.build("${IMAGE_NAME}")
+                    // Opcional: salvar imagem para cache local
+                    sh "docker save ${IMAGE_NAME} -o /tmp/app-${BUILD_NUMBER}.tar"
+                }
+            }
         }
-      }
-    }
-
-    stage('Verify Deployment') {
-      steps {
-        script {
-          // Aguarda o rollout
-          sh 'sudo k3s kubectl rollout status deployment/app-deployment --timeout=2m'
-          
-          // Verifica os pods
-          sh 'sudo k3s kubectl get pods'
-          
-          // Testa a aplicação (precisa do curl no container do Jenkins)
-          sh '''
-            POD_NAME=$(sudo k3s kubectl get pods -l app=base-app -o jsonpath="{.items[0].metadata.name}")
-            sudo k3s kubectl port-forward $POD_NAME 3001:3000 &
-            sleep 3
-            curl -f http://localhost:3001 || exit 1
-            kill %1
-          '''
+        
+        stage('Deploy to k3s') {
+            steps {
+                script {
+                    try {
+                        // Backup do deployment atual
+                        sh "${K3S_KUBECTL} get deployment app-deployment -o yaml > /tmp/deployment-backup.yaml || true"
+                        
+                        // Aplica as configurações
+                        sh "${K3S_KUBECTL} apply -f deployment.yaml"
+                        sh "${K3S_KUBECTL} apply -f service.yaml"
+                        sh "${K3S_KUBECTL} apply -f ingress.yaml"
+                        
+                        // Aguarda rollout
+                        sh "${K3S_KUBECTL} rollout status deployment/app-deployment --timeout=2m"
+                    } catch (err) {
+                        echo "Erro no deploy: ${err}"
+                        currentBuild.result = 'FAILURE'
+                        error("Falha no deploy")
+                    }
+                }
+            }
         }
-      }
+        
+        stage('Verify') {
+            steps {
+                script {
+                    // Lista os pods
+                    sh "${K3S_KUBECTL} get pods"
+                    
+                    // Testa se app responde (via port-forward)
+                    sh '''
+                        POD=$(${K3S_KUBECTL} get pod -l app=base-app -o jsonpath="{.items[0].metadata.name}")
+                        ${K3S_KUBECTL} port-forward $POD 3001:3000 &
+                        PF_PID=$!
+                        sleep 3
+                        curl -s -f http://localhost:3001 || exit 1
+                        kill $PF_PID
+                    '''
+                }
+            }
+        }
     }
-  }
-
-  post {
-    success {
-      echo "✅ Deploy ${IMAGE_TAG} realizado com sucesso!"
+    
+    post {
+        always {
+            // Limpeza
+            sh 'docker image prune -f || true'
+            sh 'rm -f /tmp/app-*.tar || true'
+            echo "Pipeline finalizado em: ${new Date()}"
+        }
+        success {
+            echo "✅ Build ${BUILD_NUMBER} concluído com sucesso!"
+            // Opcional: notificar via slack/email
+        }
+        failure {
+            echo "❌ Build ${BUILD_NUMBER} falhou!"
+            
+            // Rollback automático
+            script {
+                try {
+                    sh "${K3S_KUBECTL} rollout undo deployment/app-deployment"
+                    sh "${K3S_KUBECTL} rollout status deployment/app-deployment"
+                    echo "Rollback executado com sucesso"
+                } catch (e) {
+                    echo "Erro no rollback: ${e}"
+                }
+            }
+        }
     }
-    failure {
-      echo "❌ Pipeline falhou! Iniciando rollback..."
-      
-      // Rollback para versão anterior
-      script {
-        sh 'sudo k3s kubectl rollout undo deployment/app-deployment'
-      }
-    }
-  }
 }

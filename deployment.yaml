@@ -2,6 +2,9 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: app-deployment
+  labels:
+    app: base-app
+    managed-by: jenkins
 spec:
   replicas: 2
   selector:
@@ -11,10 +14,30 @@ spec:
     metadata:
       labels:
         app: base-app
+        build: "${BUILD_NUMBER}"  # Será substituído
     spec:
       containers:
       - name: app
-        image: app-local:v1
+        image: app-local:build-${BUILD_NUMBER}  # Tag dinâmica
+        imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 3000
-        imagePullPolicy: IfNotPresent
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 3000
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 3000
+          initialDelaySeconds: 3
+          periodSeconds: 5
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "100m"
+          limits:
+            memory: "128Mi"
+            cpu: "200m"
