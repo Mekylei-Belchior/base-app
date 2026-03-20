@@ -37,6 +37,21 @@ pipeline {
             steps {
                 script {
                     try {
+                        sh '''
+                            # Instalar kubectl se não existir
+                            if ! command -v kubectl &> /dev/null; then
+                                curl -LO "https://dl.k8s.io/release/v1.28.0/bin/linux/amd64/kubectl"
+                                chmod +x kubectl
+                                mv kubectl /usr/local/bin/
+                            fi
+                            
+                            # Configurar acesso ao k3s
+                            mkdir -p ~/.kube
+                            
+                            # Se você montar o volume, o arquivo estará disponível
+                            kubectl apply -f deployment.yaml
+                        '''
+                        
                         // Backup do deployment atual
                         sh "${K3S_KUBECTL} get deployment app-deployment -o yaml > /tmp/deployment-backup.yaml || true"
                         
