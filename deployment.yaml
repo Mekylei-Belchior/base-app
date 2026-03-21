@@ -14,7 +14,7 @@ spec:
     spec:
       containers:
         - name: app
-          image: localhost:5000/app:latest
+          image: 192.168.0.106:5000/app:latest
           ports:
             - containerPort: 3000
 
