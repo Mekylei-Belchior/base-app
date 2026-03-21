@@ -1,120 +1,63 @@
 pipeline {
     agent any
-    
+
     environment {
-        // Variáveis úteis
-        IMAGE_TAG = "build-${BUILD_NUMBER}-${GIT_COMMIT ?: 'local'}"
-        IMAGE_NAME = "app-local:${IMAGE_TAG}"
-        K3S_KUBECTL = 'sudo /usr/local/bin/k3s kubectl'
+        REGISTRY = "localhost:5000"
+        IMAGE = "app"
+        TAG = "${BUILD_NUMBER}"
     }
-    
-    options {
-        // Mostrar timestamp nos logs
-        timestamps()
-        // Mantém os últimos 10 builds
-        buildDiscarder(logRotator(numToKeepStr: '10'))
-    }
-    
+
     stages {
+
         stage('Checkout') {
             steps {
                 checkout scm
-                sh 'ls -la'  // Mostra arquivos para debug
             }
         }
-        
-        stage('Build Docker Image') {
+
+        stage('Build Image') {
             steps {
-                script {
-                    docker.build("${IMAGE_NAME}")
-                    // Opcional: salvar imagem para cache local
-                    sh "docker save ${IMAGE_NAME} -o /tmp/app-${BUILD_NUMBER}.tar"
-                }
+                sh "docker build -t $IMAGE:$TAG ."
             }
         }
-        
+
+        stage('Tag Image') {
+            steps {
+                sh "docker tag $IMAGE:$TAG $REGISTRY/$IMAGE:$TAG"
+                sh "docker tag $IMAGE:$TAG $REGISTRY/$IMAGE:latest"
+            }
+        }
+
+        stage('Push Image') {
+            steps {
+                sh "docker push $REGISTRY/$IMAGE:$TAG"
+                sh "docker push $REGISTRY/$IMAGE:latest"
+            }
+        }
+
         stage('Deploy to k3s') {
             steps {
-                script {
-                    try {
-                        sh '''
-                            # Instalar kubectl se não existir
-                            if ! command -v kubectl &> /dev/null; then
-                                curl -LO "https://dl.k8s.io/release/v1.28.0/bin/linux/amd64/kubectl"
-                                chmod +x kubectl
-                                mv kubectl /usr/local/bin/
-                            fi
-                            
-                            # Configurar acesso ao k3s
-                            mkdir -p ~/.kube
-                            
-                            # Se você montar o volume, o arquivo estará disponível
-                            kubectl apply -f deployment.yaml
-                        '''
-                        
-                        // Backup do deployment atual
-                        sh "${K3S_KUBECTL} get deployment app-deployment -o yaml > /tmp/deployment-backup.yaml || true"
-                        
-                        // Aplica as configurações
-                        sh "${K3S_KUBECTL} apply -f deployment.yaml"
-                        sh "${K3S_KUBECTL} apply -f service.yaml"
-                        sh "${K3S_KUBECTL} apply -f ingress.yaml"
-                        
-                        // Aguarda rollout
-                        sh "${K3S_KUBECTL} rollout status deployment/app-deployment --timeout=2m"
-                    } catch (err) {
-                        echo "Erro no deploy: ${err}"
-                        currentBuild.result = 'FAILURE'
-                        error("Falha no deploy")
-                    }
-                }
+                sh """
+                kubectl set image deployment/app app=$REGISTRY/$IMAGE:$TAG || true
+                kubectl apply -f k8s/
+                kubectl rollout status deployment/app
+                """
             }
         }
-        
-        stage('Verify') {
+
+        stage('Health Check') {
             steps {
-                script {
-                    // Lista os pods
-                    sh "${K3S_KUBECTL} get pods"
-                    
-                    // Testa se app responde (via port-forward)
-                    sh '''
-                        POD=$(${K3S_KUBECTL} get pod -l app=base-app -o jsonpath="{.items[0].metadata.name}")
-                        ${K3S_KUBECTL} port-forward $POD 3001:3000 &
-                        PF_PID=$!
-                        sleep 3
-                        curl -s -f http://localhost:3001 || exit 1
-                        kill $PF_PID
-                    '''
-                }
+                sh "curl -f http://app.local || exit 1"
             }
         }
     }
-    
+
     post {
-        always {
-            // Limpeza
-            sh 'docker image prune -f || true'
-            sh 'rm -f /tmp/app-*.tar || true'
-            echo "Pipeline finalizado em: ${new Date()}"
+        failure {
+            echo "Deploy falhou"
         }
         success {
-            echo "✅ Build ${BUILD_NUMBER} concluído com sucesso!"
-            // Opcional: notificar via slack/email
-        }
-        failure {
-            echo "❌ Build ${BUILD_NUMBER} falhou!"
-            
-            // Rollback automático
-            script {
-                try {
-                    sh "${K3S_KUBECTL} rollout undo deployment/app-deployment"
-                    sh "${K3S_KUBECTL} rollout status deployment/app-deployment"
-                    echo "Rollback executado com sucesso"
-                } catch (e) {
-                    echo "Erro no rollback: ${e}"
-                }
-            }
+            echo "Deploy realizado com sucesso 🚀"
         }
     }
 }

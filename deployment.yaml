@@ -1,43 +1,41 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: app-deployment
-  labels:
-    app: base-app
-    managed-by: jenkins
+  name: app
 spec:
-  replicas: 2
+  replicas: 1
   selector:
     matchLabels:
-      app: base-app
+      app: app
   template:
     metadata:
       labels:
-        app: base-app
-        build: "${BUILD_NUMBER}"  # Será substituído
+        app: app
     spec:
       containers:
-      - name: app
-        image: app-local:build-${BUILD_NUMBER}  # Tag dinâmica
-        imagePullPolicy: IfNotPresent
-        ports:
-        - containerPort: 3000
-        livenessProbe:
-          httpGet:
-            path: /
-            port: 3000
-          initialDelaySeconds: 5
-          periodSeconds: 10
-        readinessProbe:
-          httpGet:
-            path: /
-            port: 3000
-          initialDelaySeconds: 3
-          periodSeconds: 5
-        resources:
-          requests:
-            memory: "64Mi"
-            cpu: "100m"
-          limits:
-            memory: "128Mi"
-            cpu: "200m"
+        - name: app
+          image: localhost:5000/app:latest
+          ports:
+            - containerPort: 3000
+
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 3000
+            initialDelaySeconds: 5
+            periodSeconds: 5
+
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 3000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "64Mi"
+            limits:
+              cpu: "300m"
+              memory: "128Mi"
