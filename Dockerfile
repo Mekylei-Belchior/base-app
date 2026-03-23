@@ -4,7 +4,7 @@ WORKDIR /app
 
 # Melhor uso de cache
 COPY package*.json ./
-RUN npm install --production || true
+RUN npm install --production
 
 COPY . .
 
