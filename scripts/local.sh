@@ -8,7 +8,13 @@ export BUILD_NUMBER
 
 # Build da imagem
 echo "📦 Build da imagem..."
-docker build -t app-local:build-${BUILD_NUMBER} .
+docker build -t app:local .
+
+echo "🏷️ Tag da imagem..."
+docker tag app:local 192.168.0.106:5000/app:latest
+
+echo "📤 Push para registry..."
+docker push 192.168.0.106:5000/app:latest
 
 # Salva e carrega a imagem no k3s
 echo "📦 Carregando imagem no k3s..."
