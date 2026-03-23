@@ -14,6 +14,9 @@ services:
       - /usr/local/bin/kubectl:/usr/local/bin/kubectl
       - /home/dell/.kube/config:/root/.kube/config
     user: root
+    # Adicionando a configuração de hosts
+    extra_hosts:
+      - "app.local:192.168.0.106"
 
   portainer:
     image: portainer/portainer-ce:latest
