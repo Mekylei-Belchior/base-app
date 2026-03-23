@@ -4,7 +4,6 @@ pipeline {
     environment {
         REGISTRY = "192.168.0.106:5000"
         IMAGE = "app"
-        TAG = "${BUILD_NUMBER}"
     }
 
     stages {
@@ -15,39 +14,55 @@ pipeline {
             }
         }
 
-        stage('Validate Workspace') {
+        stage('Set Environment') {
             steps {
-                sh "ls -la"
-                sh "test -d k8s"
+                script {
+                    if (env.BRANCH_NAME == "main") {
+                        env.ENVIRONMENT = "prod"
+                    } else if (env.BRANCH_NAME == "release") {
+                        env.ENVIRONMENT = "staging"
+                    } else {
+                        env.ENVIRONMENT = "dev"
+                    }
+
+                    env.TAG = "${BUILD_NUMBER}-${ENVIRONMENT}"
+                }
             }
         }
 
-        stage('Build Image') {
-            steps {
-                sh "docker build -t $IMAGE:$TAG ."
-            }
-        }
-
-        stage('Tag Image') {
-            steps {
-                sh "docker tag $IMAGE:$TAG $REGISTRY/$IMAGE:$TAG"
-                sh "docker tag $IMAGE:$TAG $REGISTRY/$IMAGE:latest"
-            }
-        }
-
-        stage('Push Image') {
-            steps {
-                sh "docker push $REGISTRY/$IMAGE:$TAG"
-                sh "docker push $REGISTRY/$IMAGE:latest"
-            }
-        }
-
-        stage('Deploy to k3s') {
+        stage('Build & Push') {
             steps {
                 sh """
-                kubectl set image deployment/app app=$REGISTRY/$IMAGE:$TAG || true
-                kubectl apply -f k8s/
-                kubectl rollout status deployment/app
+                docker build -t $IMAGE:$TAG .
+                docker tag $IMAGE:$TAG $REGISTRY/$IMAGE:$TAG
+                docker push $REGISTRY/$IMAGE:$TAG
+                """
+            }
+        }
+
+        stage('Prepare Manifest') {
+            steps {
+                sh """
+                cd k8s/overlays/${ENVIRONMENT}
+                kustomize edit set image app=$REGISTRY/$IMAGE:$TAG
+                """
+            }
+        }
+
+        stage('Approve Prod') {
+            when {
+                branch 'main'
+            }
+            steps {
+                input message: "Deploy em produção?"
+            }
+        }
+
+        stage('Deploy') {
+            steps {
+                sh """
+                kubectl apply -k k8s/overlays/${ENVIRONMENT}
+                kubectl rollout status deployment/app-${ENVIRONMENT}
                 """
             }
         }
@@ -56,15 +71,6 @@ pipeline {
             steps {
                 sh "curl -f http://app.local || exit 1"
             }
-        }
-    }
-
-    post {
-        failure {
-            echo "Deploy falhou ❌"
-        }
-        success {
-            echo "Deploy realizado com sucesso 🚀"
         }
     }
 }

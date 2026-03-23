@@ -24,9 +24,9 @@ rm /tmp/app-image.tar
 
 # Deploy
 echo "🚀 Deploy no k3s..."
-sed "s/\${BUILD_NUMBER}/${BUILD_NUMBER}/g" deployment.yaml | sudo k3s kubectl apply -f -
-sudo k3s kubectl apply -f service.yaml
-sudo k3s kubectl apply -f ingress.yaml
+sed "s/\${BUILD_NUMBER}/${BUILD_NUMBER}/g" k8s/base/deployment.yaml | sudo k3s kubectl apply -f -
+sudo k3s kubectl apply -f k8s/base/service.yaml
+sudo k3s kubectl apply -f k8s/base/ingress.yaml
 
 # Aguarda pods ficarem prontos
 echo "⏳ Aguardando pods ficarem prontos..."

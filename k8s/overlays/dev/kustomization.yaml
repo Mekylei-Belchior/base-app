@@ -1,0 +1,12 @@
+resources:
+  - ../../base
+
+patchesStrategicMerge:
+  - patch.yaml
+
+nameSuffix: -dev
+
+images:
+  - name: app
+    newName: 192.168.0.106:5000/app
+    newTag: latest
