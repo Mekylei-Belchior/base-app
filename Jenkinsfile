@@ -9,12 +9,6 @@ pipeline {
 
     stages {
 
-        stage('Checkout') {
-            steps {
-                checkout scm
-            }
-        }
-
         stage('Build Image') {
             steps {
                 sh "docker build -t $IMAGE:$TAG ."
@@ -39,7 +33,7 @@ pipeline {
             steps {
                 sh """
                 kubectl set image deployment/app app=$REGISTRY/$IMAGE:$TAG || true
-                kubectl apply -f k8s/
+                kubectl apply -f k3s/
                 kubectl rollout status deployment/app
                 """
             }
