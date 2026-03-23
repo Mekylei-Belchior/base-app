@@ -9,6 +9,19 @@ pipeline {
 
     stages {
 
+        stage('Checkout') {
+            steps {
+                checkout scm
+            }
+        }
+
+        stage('Validate Workspace') {
+            steps {
+                sh "ls -la"
+                sh "test -d k8s"
+            }
+        }
+
         stage('Build Image') {
             steps {
                 sh "docker build -t $IMAGE:$TAG ."
@@ -48,7 +61,7 @@ pipeline {
 
     post {
         failure {
-            echo "Deploy falhou"
+            echo "Deploy falhou ❌"
         }
         success {
             echo "Deploy realizado com sucesso 🚀"
