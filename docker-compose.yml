@@ -1,5 +1,17 @@
-version: '3'
 services:
+  registry:
+    image: registry:2
+    container_name: registry
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    volumes:
+      - registry_data:/var/lib/registry
+    environment:
+      - REGISTRY_STORAGE_DELETE_ENABLED=true
+    extra_hosts:
+      - "app.local:192.168.0.106"
+
   jenkins:
     image: jenkins/jenkins:lts
     container_name: jenkins
@@ -14,7 +26,6 @@ services:
       - /usr/local/bin/kubectl:/usr/local/bin/kubectl
       - /home/dell/.kube/config:/root/.kube/config
     user: root
-    # Adicionando a configuração de hosts
     extra_hosts:
       - "app.local:192.168.0.106"
 
@@ -33,3 +44,4 @@ services:
 volumes:
   jenkins_home:
   portainer_data:
+  registry_data:
