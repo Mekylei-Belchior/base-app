@@ -1,61 +1,115 @@
 #!/bin/bash
+set -euo pipefail
 
 echo "🧪 Testando pipeline localmente..."
 
-# Define um número de build para teste
-BUILD_NUMBER=1
-export BUILD_NUMBER
+# -----------------------------
+# CONFIG
+# -----------------------------
+ENVIRONMENT=${ENVIRONMENT:-dev}
+BUILD_NUMBER=${BUILD_NUMBER:-1}
+REGISTRY=${REGISTRY:-192.168.0.106:5000}
+IMAGE=${IMAGE:-app}
+TAG="${BUILD_NUMBER}-${ENVIRONMENT}"
 
-# Build da imagem
+echo "🌍 Ambiente: $ENVIRONMENT"
+echo "🏷️ Tag: $TAG"
+
+# -----------------------------
+# PRE-CHECKS
+# -----------------------------
+command -v docker >/dev/null || { echo "❌ docker não encontrado"; exit 1; }
+command -v kubectl >/dev/null || { echo "❌ kubectl não encontrado"; exit 1; }
+
+# -----------------------------
+# BUILD
+# -----------------------------
 echo "📦 Build da imagem..."
-docker build -t app:local .
+docker build -t "$IMAGE:$TAG" .
 
+# -----------------------------
+# TAG
+# -----------------------------
 echo "🏷️ Tag da imagem..."
-docker tag app:local 192.168.0.106:5000/app:latest
+docker tag "$IMAGE:$TAG" "$REGISTRY/$IMAGE:$TAG"
 
+# -----------------------------
+# PUSH
+# -----------------------------
 echo "📤 Push para registry..."
-docker push 192.168.0.106:5000/app:latest
+docker push "$REGISTRY/$IMAGE:$TAG"
 
-# Salva e carrega a imagem no k3s
-echo "📦 Carregando imagem no k3s..."
-docker save app-local:build-${BUILD_NUMBER} -o /tmp/app-image.tar
-sudo k3s ctr images import /tmp/app-image.tar
-rm /tmp/app-image.tar
+# -----------------------------
+# PREPARA OVERLAY TEMPORÁRIO
+# -----------------------------
+echo "🧱 Preparando manifest imutável..."
 
-# Deploy
+TMP_DIR=$(mktemp -d)
+cp -r k8s "$TMP_DIR/"
+
+cd "$TMP_DIR/k8s/overlays/$ENVIRONMENT"
+
+# -----------------------------
+# BUILD DO MANIFEST (KUSTOMIZE EMBUTIDO)
+# -----------------------------
+echo "🔧 Gerando manifest com kubectl kustomize..."
+
+kubectl kustomize . > /tmp/rendered.yaml
+
+# 🔥 Substitui imagem no YAML gerado (imutável, sem alterar repo)
+sed -i "s|image: .*app.*|image: $REGISTRY/$IMAGE:$TAG|g" /tmp/rendered.yaml
+
+# -----------------------------
+# DEPLOY
+# -----------------------------
 echo "🚀 Deploy no k3s..."
-sed "s/\${BUILD_NUMBER}/${BUILD_NUMBER}/g" k8s/base/deployment.yaml | sudo k3s kubectl apply -f -
-sudo k3s kubectl apply -f k8s/base/service.yaml
-sudo k3s kubectl apply -f k8s/base/ingress.yaml
+kubectl apply -f /tmp/rendered.yaml
 
-# Aguarda pods ficarem prontos
-echo "⏳ Aguardando pods ficarem prontos..."
-sudo k3s kubectl wait --for=condition=ready pod -l app=base-app --timeout=60s
+# Aguarda rollout
+echo "⏳ Aguardando rollout..."
+kubectl rollout status deployment/app-${ENVIRONMENT}
 
-# Port-forward para teste
-echo "✅ Testando aplicação..."
-sudo k3s kubectl port-forward service/app-service 3000:80 &
+# -----------------------------
+# TESTE
+# -----------------------------
+echo "🌐 Testando aplicação..."
+
+kubectl port-forward service/app-${ENVIRONMENT} 3000:80 >/dev/null 2>&1 &
 PF_PID=$!
 sleep 3
 
-if curl -f http://localhost:3000; then
+if curl -fs http://localhost:3000; then
     echo "✅ Sucesso!"
 else
     echo "❌ Falha!"
+    kill $PF_PID 2>/dev/null || true
+    exit 1
 fi
 
-# Limpa o port-forward
-kill $PF_PID 2>/dev/null
+kill $PF_PID 2>/dev/null || true
 
-# Logs
+# -----------------------------
+# LOGS
+# -----------------------------
 echo "📊 Logs do pod:"
-POD=$(sudo k3s kubectl get pod -l app=base-app -o name | head -1)
+POD=$(kubectl get pod -l app=app -o name | head -1 || true)
+
 if [ -n "$POD" ]; then
-    sudo k3s kubectl logs $POD
+    kubectl logs "$POD"
 else
     echo "Nenhum pod encontrado!"
 fi
 
-# Status final
+# -----------------------------
+# STATUS FINAL
+# -----------------------------
 echo "📌 Status dos pods:"
-sudo k3s kubectl get pods
+kubectl get pods
+
+# -----------------------------
+# CLEANUP
+# -----------------------------
+rm -rf "$TMP_DIR"
+rm -f /tmp/rendered.yaml
+
+echo "🎉 Pipeline local finalizada com sucesso!"

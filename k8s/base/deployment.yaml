@@ -17,6 +17,11 @@ spec:
           image: 192.168.0.106:5000/app:latest
           ports:
             - containerPort: 3000
+          envFrom:
+            - configMapRef:
+                name: app-config
+            - secretRef:
+                name: app-secret
 
           readinessProbe:
             httpGet:

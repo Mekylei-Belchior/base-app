@@ -1,10 +1,23 @@
 resources:
   - ../../base
 
-patchesStrategicMerge:
-  - patch.yaml
-
 nameSuffix: -staging
+
+patches:
+  - path: patch.yaml
+    target:
+      kind: Deployment
+      name: app
+
+configMapGenerator:
+  - name: app-config
+    envs:
+      - config.env
+
+secretGenerator:
+  - name: app-secret
+    literals:
+      - DB_PASSWORD=stg123
 
 images:
   - name: app
