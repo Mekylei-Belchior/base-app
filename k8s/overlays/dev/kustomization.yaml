@@ -8,6 +8,10 @@ patches:
     target:
       kind: Deployment
       name: app
+  - path: ingress-patch.yaml
+    target:
+      kind: Ingress
+      name: app
 
 configMapGenerator:
   - name: app-config
