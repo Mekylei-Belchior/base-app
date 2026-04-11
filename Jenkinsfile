@@ -82,7 +82,7 @@ pipeline {
             steps {
                 retry(5) {
                     sleep 10
-                    sh "curl -sf http://app-${ENVIRONMENT}.local/hello | grep message"
+                    sh "curl -sf http://app.local/hello | grep message"
                 }
             }
         }
