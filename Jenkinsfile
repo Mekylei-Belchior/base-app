@@ -54,8 +54,8 @@ pipeline {
         stage('Prepare Manifest') {
             steps {
                 sh """
-                sed -i "s|newName: .*|newName: ${REGISTRY}/${IMAGE}|" k8s/overlays/${ENVIRONMENT}/kustomization.yaml
-                sed -i "s|newTag: .*|newTag: ${TAG}|" k8s/overlays/${ENVIRONMENT}/kustomization.yaml
+                kubectl kustomize k8s/overlays/${ENVIRONMENT} > /tmp/rendered-${ENVIRONMENT}.yaml
+                sed -i "s|image: .*${IMAGE}.*|image: ${REGISTRY}/${IMAGE}:${TAG}|g" /tmp/rendered-${ENVIRONMENT}.yaml
                 """
             }
         }
@@ -72,8 +72,8 @@ pipeline {
         stage('Deploy') {
             steps {
                 sh """
-                kubectl apply -k k8s/overlays/${ENVIRONMENT}
-                kubectl rollout status deployment/app-${ENVIRONMENT}
+                kubectl apply -f /tmp/rendered-${ENVIRONMENT}.yaml
+                kubectl rollout status deployment/app-${ENVIRONMENT} --timeout=5m
                 """
             }
         }
