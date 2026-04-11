@@ -25,3 +25,8 @@ Thumbs.db
 # Node (legacy, kept to avoid accidental commits if re-added)
 node_modules/
 npm-debug.log
+
+# Arquivos de distribuição
+*.zip
+*.tar.gz
+*.tar
