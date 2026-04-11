@@ -30,6 +30,17 @@ pipeline {
             }
         }
 
+        stage('Test') {
+            steps {
+                sh './gradlew test --no-daemon'
+            }
+            post {
+                always {
+                    junit 'build/test-results/test/**/*.xml'
+                }
+            }
+        }
+
         stage('Build & Push') {
             steps {
                 sh """
@@ -69,8 +80,21 @@ pipeline {
 
         stage('Health Check') {
             steps {
-                sh "curl -f http://app.local || exit 1"
+                retry(5) {
+                    sleep 10
+                    sh "curl -sf http://app-${ENVIRONMENT}.local/hello | grep message"
+                }
             }
+        }
+    }
+
+    post {
+        failure {
+            sh "kubectl rollout undo deployment/app-${ENVIRONMENT} || true"
+            echo "Deploy falhou — rollback executado para app-${ENVIRONMENT}"
+        }
+        always {
+            sh 'docker image prune -f || true'
         }
     }
 }

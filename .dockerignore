@@ -1,9 +1,9 @@
-node_modules
-npm-debug.log
 .git
-.gitignore
+.gradle
+build
 *.md
-Dockerfile
-.dockerignore
 Jenkinsfile
-*.yaml
+docker-compose.yml
+k8s
+scripts
+src/test

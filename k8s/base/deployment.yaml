@@ -15,32 +15,40 @@ spec:
       containers:
         - name: app
           image: 192.168.0.106:5000/app:latest
+          imagePullPolicy: Always
           ports:
-            - containerPort: 3000
+            - containerPort: 8080
           envFrom:
             - configMapRef:
                 name: app-config
             - secretRef:
                 name: app-secret
 
+          startupProbe:
+            httpGet:
+              path: /hello
+              port: 8080
+            failureThreshold: 30
+            periodSeconds: 2
+
           readinessProbe:
             httpGet:
-              path: /health
-              port: 3000
+              path: /hello
+              port: 8080
             initialDelaySeconds: 5
             periodSeconds: 5
 
           livenessProbe:
             httpGet:
-              path: /health
-              port: 3000
+              path: /hello
+              port: 8080
             initialDelaySeconds: 10
             periodSeconds: 10
 
           resources:
             requests:
               cpu: "100m"
-              memory: "64Mi"
+              memory: "256Mi"
             limits:
-              cpu: "300m"
-              memory: "128Mi"
+              cpu: "500m"
+              memory: "768Mi"

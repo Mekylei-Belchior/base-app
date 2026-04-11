@@ -20,6 +20,34 @@ echo "🏷️ Tag: $TAG"
 # -----------------------------
 command -v docker >/dev/null || { echo "❌ docker não encontrado"; exit 1; }
 command -v kubectl >/dev/null || { echo "❌ kubectl não encontrado"; exit 1; }
+command -v java >/dev/null || { echo "❌ java não encontrado (Java 21 necessário)"; exit 1; }
+
+# Garante acesso ao kubeconfig do k3s sem precisar de sudo
+K3S_KUBECONFIG="/etc/rancher/k3s/k3s.yaml"
+if [ -r "$K3S_KUBECONFIG" ]; then
+    export KUBECONFIG="$K3S_KUBECONFIG"
+elif [ -f "$HOME/.kube/config" ]; then
+    export KUBECONFIG="$HOME/.kube/config"
+else
+    echo "❌ kubeconfig não encontrado. Execute:"
+    echo "   sudo chmod 644 /etc/rancher/k3s/k3s.yaml"
+    echo "   ou: mkdir -p ~/.kube && sudo cp /etc/rancher/k3s/k3s.yaml ~/.kube/config && sudo chown \$USER ~/.kube/config"
+    exit 1
+fi
+
+echo "🔑 Usando kubeconfig: $KUBECONFIG"
+
+# -----------------------------
+# TESTS
+# -----------------------------
+echo "🧪 Executando testes..."
+./gradlew test --no-daemon --quiet || { echo "❌ Testes falharam"; exit 1; }
+
+# -----------------------------
+# BUILD JAR
+# -----------------------------
+echo "🔨 Build do JAR..."
+./gradlew bootJar --no-daemon --quiet || { echo "❌ Build do JAR falhou"; exit 1; }
 
 # -----------------------------
 # BUILD
@@ -74,11 +102,11 @@ kubectl rollout status deployment/app-${ENVIRONMENT}
 # -----------------------------
 echo "🌐 Testando aplicação..."
 
-kubectl port-forward service/app-${ENVIRONMENT} 3000:80 >/dev/null 2>&1 &
+kubectl port-forward service/app-${ENVIRONMENT} 18080:80 >/dev/null 2>&1 &
 PF_PID=$!
-sleep 3
+sleep 5
 
-if curl -fs http://localhost:3000; then
+if curl -fs http://localhost:18080/hello | grep -q message; then
     echo "✅ Sucesso!"
 else
     echo "❌ Falha!"
