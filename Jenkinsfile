@@ -19,10 +19,13 @@ pipeline {
                 script {
                     if (env.BRANCH_NAME == "main") {
                         env.ENVIRONMENT = "prod"
+                        env.APP_HOST = "prod.app.local"
                     } else if (env.BRANCH_NAME == "release") {
                         env.ENVIRONMENT = "staging"
+                        env.APP_HOST = "stg.app.local"
                     } else {
                         env.ENVIRONMENT = "dev"
+                        env.APP_HOST = "dev.app.local"
                     }
 
                     env.TAG = "${BUILD_NUMBER}-${ENVIRONMENT}"
@@ -82,7 +85,7 @@ pipeline {
             steps {
                 retry(5) {
                     sleep 10
-                    sh "curl -sf http://app.local/hello | grep message"
+                    sh "curl -sf http://${APP_HOST}/hello | grep message"
                 }
             }
         }
