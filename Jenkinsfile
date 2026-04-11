@@ -54,8 +54,8 @@ pipeline {
         stage('Prepare Manifest') {
             steps {
                 sh """
-                cd k8s/overlays/${ENVIRONMENT}
-                kustomize edit set image app=$REGISTRY/$IMAGE:$TAG
+                sed -i "s|newName: .*|newName: ${REGISTRY}/${IMAGE}|" k8s/overlays/${ENVIRONMENT}/kustomization.yaml
+                sed -i "s|newTag: .*|newTag: ${TAG}|" k8s/overlays/${ENVIRONMENT}/kustomization.yaml
                 """
             }
         }
