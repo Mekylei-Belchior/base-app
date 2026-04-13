@@ -18,9 +18,10 @@ echo "🏷️ Tag: $TAG"
 # -----------------------------
 # PRE-CHECKS
 # -----------------------------
-command -v docker >/dev/null || { echo "❌ docker não encontrado"; exit 1; }
-command -v kubectl >/dev/null || { echo "❌ kubectl não encontrado"; exit 1; }
-command -v java >/dev/null || { echo "❌ java não encontrado (Java 21 necessário)"; exit 1; }
+command -v docker    >/dev/null || { echo "❌ docker não encontrado"; exit 1; }
+command -v kubectl   >/dev/null || { echo "❌ kubectl não encontrado"; exit 1; }
+command -v java      >/dev/null || { echo "❌ java não encontrado (Java 21 necessário)"; exit 1; }
+command -v kustomize >/dev/null || { echo "❌ kustomize não encontrado. Instale: https://kubectl.docs.kubernetes.io/installation/kustomize/"; exit 1; }
 
 # Garante acesso ao kubeconfig do k3s sem precisar de sudo
 K3S_KUBECONFIG="/etc/rancher/k3s/k3s.yaml"
@@ -46,12 +47,15 @@ echo "🧪 Executando testes..."
 # -----------------------------
 # BUILD JAR
 # -----------------------------
+# bootJar reutiliza o bytecode compilado por :test (build incremental do Gradle).
+# Sem duplicação de compilação — mesmo artefato que vai para o Docker.
 echo "🔨 Build do JAR..."
 ./gradlew bootJar --no-daemon --quiet || { echo "❌ Build do JAR falhou"; exit 1; }
 
 # -----------------------------
 # BUILD
 # -----------------------------
+# Dockerfile agora só copia o JAR pré-compilado — sem Gradle dentro do Docker.
 echo "📦 Build da imagem..."
 docker build -t "$IMAGE:$TAG" .
 
@@ -67,35 +71,30 @@ docker tag "$IMAGE:$TAG" "$REGISTRY/$IMAGE:$TAG"
 echo "📤 Push para registry..."
 docker push "$REGISTRY/$IMAGE:$TAG"
 
-# -----------------------------
-# PREPARA OVERLAY TEMPORÁRIO
-# -----------------------------
-echo "🧱 Preparando manifest imutável..."
+# -------------------------------------------------------
+# DEPLOY — kustomize edit set image (sem sed)
+# -------------------------------------------------------
+# kustomize edit modifica somente o campo images[], de forma idempotente.
+# Trabalhamos numa cópia temporária para não alterar arquivos do repositório.
+echo "🧱 Preparando overlay temporário..."
 
 TMP_DIR=$(mktemp -d)
 cp -r k8s "$TMP_DIR/"
-
 cd "$TMP_DIR/k8s/overlays/$ENVIRONMENT"
 
-# -----------------------------
-# BUILD DO MANIFEST (KUSTOMIZE EMBUTIDO)
-# -----------------------------
-echo "🔧 Gerando manifest com kubectl kustomize..."
+echo "🔧 Atualizando imagem no overlay..."
+kustomize edit set image app="$REGISTRY/$IMAGE:$TAG"
 
-kubectl kustomize . > /tmp/rendered.yaml
-
-# 🔥 Substitui imagem no YAML gerado (imutável, sem alterar repo)
-sed -i "s|image: .*app.*|image: $REGISTRY/$IMAGE:$TAG|g" /tmp/rendered.yaml
-
-# -----------------------------
-# DEPLOY
-# -----------------------------
 echo "🚀 Deploy no k3s..."
-kubectl apply -f /tmp/rendered.yaml
+kubectl apply -k .
+
+cd - > /dev/null  # volta ao diretório original do projeto
 
 # Aguarda rollout
 echo "⏳ Aguardando rollout..."
 kubectl rollout status deployment/app-${ENVIRONMENT}
+
+rm -rf "$TMP_DIR"
 
 # -----------------------------
 # TESTE
@@ -106,7 +105,9 @@ kubectl port-forward service/app-${ENVIRONMENT} 18080:80 >/dev/null 2>&1 &
 PF_PID=$!
 sleep 5
 
-if curl -fs http://localhost:18080/hello | grep -q message; then
+# /actuator/health reflete o estado real do Spring Boot (readiness/liveness).
+# /hello é endpoint de negócio — evitar para health checks de infraestrutura.
+if curl -fs http://localhost:18080/actuator/health | grep -q '"status":"UP"'; then
     echo "✅ Sucesso!"
 else
     echo "❌ Falha!"

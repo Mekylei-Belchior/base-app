@@ -1,26 +1,14 @@
-# ─── Stage 1: Build ────────────────────────────────────────────────
-FROM eclipse-temurin:21-jdk-alpine AS build
-
-WORKDIR /build
-
-COPY gradlew settings.gradle build.gradle ./
-COPY gradle ./gradle
-
-# Download dependencies first (layer cache friendly)
-RUN ./gradlew dependencies --no-daemon -q || true
-
-COPY src ./src
-
-RUN ./gradlew bootJar --no-daemon
-
-# ─── Stage 2: Runtime ───────────────────────────────────────────────
+# ─── Runtime-only ─────────────────────────────────────────────────
+# O JAR é compilado pelo Jenkinsfile (./gradlew bootJar) antes do docker build.
+# Este Dockerfile somente empacota o artefato pré-compilado na imagem runtime.
+# O JAR é copiado para a imagem e o comando de execução é configurado para iniciar a aplicação.
 FROM eclipse-temurin:21-jre-alpine
 
 RUN addgroup -S appgroup && adduser -S -u 1001 -G appgroup appuser
 
 WORKDIR /app
 
-COPY --from=build /build/build/libs/base-app.jar app.jar
+COPY build/libs/base-app.jar app.jar
 
 USER appuser
 

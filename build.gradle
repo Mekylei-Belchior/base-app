@@ -1,5 +1,6 @@
 plugins {
     id 'java'
+    id 'jacoco'
     id 'org.springframework.boot' version '3.4.4'
     id 'io.spring.dependency-management' version '1.1.7'
 }
@@ -25,6 +26,32 @@ dependencies {
 
 tasks.named('test') {
     useJUnitPlatform()
+    // Gera o relatório JaCoCo automaticamente ao final de cada execução de testes
+    finalizedBy jacocoTestReport
+}
+
+// Gera relatório HTML + XML (XML é consumido por plugins do Jenkins/SonarQube)
+jacocoTestReport {
+    dependsOn test
+    reports {
+        xml.required = true
+        html.required = true
+    }
+}
+
+// Verificação de cobertura mínima — executada explicitamente pelo pipeline ("Quality Gate").
+// Separada da task :test para não bloquear o build local por cobertura insuficiente.
+// Para enforçar localmente: ./gradlew jacocoTestCoverageVerification
+jacocoTestCoverageVerification {
+    violationRules {
+        rule {
+            limit {
+                counter = 'LINE'
+                value   = 'COVEREDRATIO'
+                minimum = 0.80
+            }
+        }
+    }
 }
 
 bootJar {

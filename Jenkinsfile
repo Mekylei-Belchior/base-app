@@ -3,7 +3,7 @@ pipeline {
 
     environment {
         REGISTRY = "192.168.0.106:5000"
-        IMAGE = "app"
+        IMAGE    = "app"
     }
 
     stages {
@@ -18,48 +18,72 @@ pipeline {
             steps {
                 script {
                     def branch = (env.GIT_BRANCH ?: '').replaceFirst('origin/', '')
-                    if (branch == "main") {
-                        env.ENVIRONMENT = "prod"
-                        env.APP_HOST = "prod.app.local"
-                    } else if (branch == "release") {
-                        env.ENVIRONMENT = "staging"
-                        env.APP_HOST = "stg.app.local"
+                    if (branch == 'main') {
+                        env.ENVIRONMENT = 'prod'
+                        env.APP_HOST    = 'prod.app.local'
+                    } else if (branch == 'release') {
+                        env.ENVIRONMENT = 'staging'
+                        env.APP_HOST    = 'stg.app.local'
                     } else {
-                        env.ENVIRONMENT = "dev"
-                        env.APP_HOST = "dev.app.local"
+                        env.ENVIRONMENT = 'dev'
+                        env.APP_HOST    = 'dev.app.local'
                     }
-
-                    env.TAG = "${BUILD_NUMBER}-${ENVIRONMENT}"
+                    env.TAG = "${BUILD_NUMBER}-${env.ENVIRONMENT}"
                 }
             }
         }
 
+        // ─── Testes + JAR ─────────────────────────────────────────────
+        // test compila as classes e roda a suíte.
+        // bootJar reutiliza o bytecode já compilado (build incremental do Gradle).
+        // Resultado: um único ciclo de compilação em vez de dois.
         stage('Test') {
             steps {
                 sh './gradlew test --no-daemon'
+                sh './gradlew bootJar --no-daemon'
             }
             post {
                 always {
                     junit 'build/test-results/test/**/*.xml'
+                    // Arquiva o relatório HTML do JaCoCo para consulta no Jenkins
+                    archiveArtifacts artifacts: 'build/reports/jacoco/**', allowEmptyArchive: true
                 }
             }
         }
 
+        // ─── Quality Gate — cobertura mínima 80% ──────────────────────
+        // Separado do stage Test para que falha de cobertura seja reportada
+        // com contexto próprio, sem misturar com falhas de teste.
+        stage('Quality Gate') {
+            steps {
+                sh './gradlew jacocoTestCoverageVerification --no-daemon'
+            }
+        }
+
+        // ─── Build & Push — docker build só copia o JAR — sem Gradle dentro do Docker ─
         stage('Build & Push') {
             steps {
                 sh """
-                docker build -t $IMAGE:$TAG .
-                docker tag $IMAGE:$TAG $REGISTRY/$IMAGE:$TAG
-                docker push $REGISTRY/$IMAGE:$TAG
+                docker build -t ${IMAGE}:${TAG} .
+                docker tag ${IMAGE}:${TAG} ${REGISTRY}/${IMAGE}:${TAG}
+                docker push ${REGISTRY}/${IMAGE}:${TAG}
                 """
             }
         }
 
-        stage('Prepare Manifest') {
+        // ─── Security Scan ────────────────────────────────────────────
+        // Trivy roda via Docker — nenhuma instalação necessária no agente.
+        // --insecure: aceita o registry local sem TLS (IP + porta 5000).
+        // --exit-code 1: falha o pipeline em vulnerabilidades HIGH ou CRITICAL.
+        stage('Security Scan') {
             steps {
                 sh """
-                kubectl kustomize k8s/overlays/${ENVIRONMENT} > /tmp/rendered-${ENVIRONMENT}.yaml
-                sed -i "s|image: .*${IMAGE}.*|image: ${REGISTRY}/${IMAGE}:${TAG}|g" /tmp/rendered-${ENVIRONMENT}.yaml
+                docker run --rm --network host \
+                  aquasec/trivy image \
+                  --exit-code 1 \
+                  --severity HIGH,CRITICAL \
+                  --insecure \
+                  ${REGISTRY}/${IMAGE}:${TAG}
                 """
             }
         }
@@ -69,24 +93,35 @@ pipeline {
                 expression { env.ENVIRONMENT == 'prod' }
             }
             steps {
-                input message: "Deploy em produção?"
+                input message: "Deploy em produção? (${TAG})"
             }
         }
 
+        // ─── Deploy — kustomize edit set image (sem sed) ─────────────
+        // Trabalhamos numa cópia temporária para não alterar os arquivos do repo.
+        // kustomize edit set image modifica apenas o campo images[], de forma
+        // idempotente e semântica — não é uma substituição cega de texto.
         stage('Deploy') {
             steps {
                 sh """
-                kubectl apply -f /tmp/rendered-${ENVIRONMENT}.yaml
-                kubectl rollout status deployment/app-${ENVIRONMENT} --timeout=5m
+                TMP=\$(mktemp -d)
+                cp -r k8s "\$TMP/"
+                cd "\$TMP/k8s/overlays/${env.ENVIRONMENT}"
+                kustomize edit set image ${IMAGE}=${REGISTRY}/${IMAGE}:${TAG}
+                kubectl apply -k .
+                kubectl rollout status deployment/${IMAGE}-${env.ENVIRONMENT} --timeout=5m
+                rm -rf "\$TMP"
                 """
             }
         }
 
+        // ─── Health Check — actuator em vez de endpoint de negócio ────
+        // /actuator/health reflete o estado real da aplicação (Spring Boot lifecycle).
         stage('Health Check') {
             steps {
                 retry(5) {
                     sleep 10
-                    sh "curl -sf http://${APP_HOST}/hello | grep message"
+                    sh "curl -sf http://${APP_HOST}/actuator/health | grep 'UP'"
                 }
             }
         }
@@ -94,8 +129,8 @@ pipeline {
 
     post {
         failure {
-            sh "kubectl rollout undo deployment/app-${ENVIRONMENT} || true"
-            echo "Deploy falhou — rollback executado para app-${ENVIRONMENT}"
+            sh "kubectl rollout undo deployment/${IMAGE}-${env.ENVIRONMENT} || true"
+            echo "Deploy falhou — rollback executado para ${IMAGE}-${env.ENVIRONMENT}"
         }
         always {
             sh 'docker image prune -f || true'
