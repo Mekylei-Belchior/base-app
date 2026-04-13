@@ -17,10 +17,11 @@ pipeline {
         stage('Set Environment') {
             steps {
                 script {
-                    if (env.BRANCH_NAME == "main") {
+                    def branch = (env.GIT_BRANCH ?: '').replaceFirst('origin/', '')
+                    if (branch == "main") {
                         env.ENVIRONMENT = "prod"
                         env.APP_HOST = "prod.app.local"
-                    } else if (env.BRANCH_NAME == "release") {
+                    } else if (branch == "release") {
                         env.ENVIRONMENT = "staging"
                         env.APP_HOST = "stg.app.local"
                     } else {
@@ -65,7 +66,7 @@ pipeline {
 
         stage('Approve Prod') {
             when {
-                branch 'main'
+                expression { env.ENVIRONMENT == 'prod' }
             }
             steps {
                 input message: "Deploy em produção?"
