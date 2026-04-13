@@ -65,7 +65,7 @@ pipeline {
 
         stage('Approve Prod') {
             when {
-                branch 'main'
+                expression { env.ENVIRONMENT == 'prod' }
             }
             steps {
                 input message: "Deploy em produção?"
