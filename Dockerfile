@@ -4,7 +4,10 @@
 # O JAR é copiado para a imagem e o comando de execução é configurado para iniciar a aplicação.
 FROM eclipse-temurin:21-jre-alpine
 
-RUN addgroup -S appgroup && adduser -S -u 1001 -G appgroup appuser
+# Atualiza todos os pacotes Alpine para corrigir vulnerabilidades HIGH/CRITICAL
+# detectadas pelo Trivy (gnutls, openssl, libpng, zlib, etc.)
+RUN apk upgrade --no-cache && \
+    addgroup -S appgroup && adduser -S -u 1001 -G appgroup appuser
 
 WORKDIR /app
 

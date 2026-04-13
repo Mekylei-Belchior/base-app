@@ -1,7 +1,7 @@
 plugins {
     id 'java'
     id 'jacoco'
-    id 'org.springframework.boot' version '3.4.4'
+    id 'org.springframework.boot' version '3.4.5'
     id 'io.spring.dependency-management' version '1.1.7'
 }
 
@@ -12,6 +12,12 @@ java {
     sourceCompatibility = JavaVersion.VERSION_21
     targetCompatibility = JavaVersion.VERSION_21
 }
+
+// Força versões mínimas seguras para dependências gerenciadas pelo Spring BOM.
+// Corrige CVEs reportados pelo Trivy: Tomcat (CVE-2026-29145 CRITICAL e outros)
+// e Spring Framework (CVE-2025-41249 HIGH).
+ext['tomcat.version']           = '10.1.54'
+ext['spring-framework.version'] = '6.2.11'
 
 repositories {
     mavenCentral()
