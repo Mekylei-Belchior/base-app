@@ -16,7 +16,7 @@ RUN ./gradlew bootJar --no-daemon
 # ─── Stage 2: Runtime ───────────────────────────────────────────────
 FROM eclipse-temurin:21-jre-alpine
 
-RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+RUN addgroup -S appgroup && adduser -S -u 1001 -G appgroup appuser
 
 WORKDIR /app
 

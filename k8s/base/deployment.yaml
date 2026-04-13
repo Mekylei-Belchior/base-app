@@ -12,6 +12,11 @@ spec:
       labels:
         app: app
     spec:
+      # Garante que nenhum container rode como root (UID 0)
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        runAsGroup: 1001
       containers:
         - name: app
           image: 192.168.0.106:5000/app:latest
@@ -21,26 +26,44 @@ spec:
           envFrom:
             - configMapRef:
                 name: app-config
+            # optional: true → pod não falha se o secret ainda não foi criado.
+            # Crie o secret via scripts/create-secrets.sh antes de usar dados sensíveis.
             - secretRef:
                 name: app-secret
+                optional: true
+          # Reduz superfície de ataque do container
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          # Spring Boot precisa de /tmp para extrair nested JARs em runtime
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
 
+          # startupProbe: aguarda a app estar pronta para aceitar tráfego
+          # Usa readiness porque durante startup ainda não sabemos se está "vivo"
           startupProbe:
             httpGet:
-              path: /hello
+              path: /actuator/health/readiness
               port: 8080
             failureThreshold: 30
             periodSeconds: 2
 
+          # readinessProbe: controla se o pod recebe tráfego do Service
           readinessProbe:
             httpGet:
-              path: /hello
+              path: /actuator/health/readiness
               port: 8080
             initialDelaySeconds: 5
             periodSeconds: 5
 
+          # livenessProbe: reinicia o container se travar (deadlock, OOM, etc.)
           livenessProbe:
             httpGet:
-              path: /hello
+              path: /actuator/health/liveness
               port: 8080
             initialDelaySeconds: 10
             periodSeconds: 10
@@ -52,3 +75,7 @@ spec:
             limits:
               cpu: "500m"
               memory: "768Mi"
+      volumes:
+        # emptyDir montado em /tmp para permitir readOnlyRootFilesystem: true
+        - name: tmp
+          emptyDir: {}

@@ -18,10 +18,8 @@ configMapGenerator:
     envs:
       - config.env
 
-secretGenerator:
-  - name: app-secret
-    literals:
-      - DB_PASSWORD=stg123
+# Secrets NÃO são gerenciados pelo Kustomize para evitar valores sensíveis no Git.
+# Execute scripts/create-secrets.sh para criar o secret 'app-secret-staging' no cluster.
 
 images:
   - name: app

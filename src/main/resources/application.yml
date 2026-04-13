@@ -7,3 +7,22 @@ server:
 
 app:
   environment: ${APP_ENV:dev}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        # Expõe apenas health e info para reduzir superfície de ataque
+        include: "health,info"
+  endpoint:
+    health:
+      # Nunca expõe detalhes internos (env, DB credentials, etc.)
+      show-details: never
+      # Ativa /actuator/health/liveness e /actuator/health/readiness explicitamente
+      probes:
+        enabled: true
+  health:
+    livenessstate:
+      enabled: true
+    readinessstate:
+      enabled: true
