@@ -75,11 +75,12 @@ pipeline {
         // Trivy roda via Docker — nenhuma instalação necessária no agente.
         // --insecure: aceita o registry local sem TLS (IP + porta 5000).
         // --exit-code 1: falha o pipeline em vulnerabilidades HIGH ou CRITICAL.
+        // Imagem oficial migrou do Docker Hub (aquasec/trivy) para o GHCR.
         stage('Security Scan') {
             steps {
                 sh """
                 docker run --rm --network host \
-                  aquasec/trivy image \
+                  ghcr.io/aquasecurity/trivy:latest image \
                   --exit-code 1 \
                   --severity HIGH,CRITICAL \
                   --insecure \
