@@ -1,4 +1,4 @@
-package com.baseapp.entrypoint.rest;
+package com.baseapp.infrastructure.adapter.in.rest;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -26,15 +26,15 @@ public class GlobalExceptionHandler {
 
     /**
      * Erros de validação ou regras de negócio explicitamente verificadas.
-     * Ex: argumento nulo, formato inválido, etc.
+     * Ex: argumento nulo, blank, formato inválido.
      */
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<ProblemDetail> handleIllegalArgument(IllegalArgumentException e) {
-        log.warn("Bad request: {}", e.getMessage());
+        log.warn("Erro de requisição: {}", e.getMessage());
 
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, e.getMessage());
         problem.setType(URI.create("about:blank"));
-        problem.setTitle("Bad Request");
+        problem.setTitle("Requisição Inválida");
         problem.setProperty("timestamp", Instant.now());
 
         return ResponseEntity.badRequest().body(problem);

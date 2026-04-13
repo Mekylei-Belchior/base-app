@@ -1,7 +1,7 @@
-package com.baseapp.entrypoint.rest;
+package com.baseapp.infrastructure.adapter.in.rest;
 
-import com.baseapp.application.usecase.HelloUseCase;
 import com.baseapp.domain.model.HelloMessage;
+import com.baseapp.domain.port.in.HelloUseCase;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
@@ -29,12 +29,12 @@ class HelloControllerTest {
     @Test
     void getHello_shouldReturn200WithJson() throws Exception {
         Instant now = Instant.parse("2026-04-09T12:00:00Z");
-        when(helloUseCase.execute()).thenReturn(new HelloMessage("Hello from k3s 🚀", now));
+        when(helloUseCase.execute()).thenReturn(new HelloMessage("Hello from k3s \uD83D\uDE80", now));
 
         mockMvc.perform(get("/hello"))
                 .andExpect(status().isOk())
                 .andExpect(content().contentType(MediaType.APPLICATION_JSON))
-                .andExpect(jsonPath("$.message").value("Hello from k3s 🚀"))
+                .andExpect(jsonPath("$.message").value("Hello from k3s \uD83D\uDE80"))
                 .andExpect(jsonPath("$.timestamp").value("2026-04-09T12:00:00Z"));
     }
 
