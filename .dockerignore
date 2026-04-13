@@ -1,9 +1,26 @@
 .git
+.vscode
+.idea
 .gradle
 build
 *.md
+.gitignore
 Jenkinsfile
 docker-compose.yml
 k8s
 scripts
 src/test
+
+# Environment variables
+.env
+.env.*
+
+# Editor temporary files
+*.swp
+*.swo
+*~
+*.bak
+
+# Application logs
+logs/
+*.log

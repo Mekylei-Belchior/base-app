@@ -5,10 +5,11 @@ build/
 
 # IDE
 .idea/
+.vscode/
 *.iml
 *.iws
 *.ipr
-out/
+/out/
 
 # Compiled
 *.class
@@ -30,3 +31,18 @@ npm-debug.log
 *.zip
 *.tar.gz
 *.tar
+
+# Editor temporary files
+*.swp
+*.swo
+*~
+*.bak
+
+# Environment variables (sensitive data)
+.env
+.env.local
+.env.*.local
+
+# Application logs
+logs/
+*.log

@@ -23,6 +23,7 @@ import java.time.Instant;
 public class GlobalExceptionHandler {
 
     private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
+    private static final URI BLANK_URI = URI.create("about:blank");
 
     /**
      * Erros de validação ou regras de negócio explicitamente verificadas.
@@ -33,7 +34,7 @@ public class GlobalExceptionHandler {
         log.warn("Erro de requisição: {}", e.getMessage());
 
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, e.getMessage());
-        problem.setType(URI.create("about:blank"));
+        problem.setType(BLANK_URI);
         problem.setTitle("Requisição Inválida");
         problem.setProperty("timestamp", Instant.now());
 
@@ -52,7 +53,7 @@ public class GlobalExceptionHandler {
                 HttpStatus.INTERNAL_SERVER_ERROR,
                 "Um erro inesperado ocorreu. Por favor, tente novamente mais tarde."
         );
-        problem.setType(URI.create("about:blank"));
+        problem.setType(BLANK_URI);
         problem.setTitle("Erro Interno do Servidor");
         problem.setProperty("timestamp", Instant.now());
 
