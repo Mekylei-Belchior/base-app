@@ -1,0 +1,385 @@
+# Relatório de Auditoria do Projeto
+
+**Repositório:** base-app  
+**Data:** 2026-04-14  
+**Auditado por:** project-audit skill (Opus — planejamento · Haiku — execução · Sonnet — consolidação e relatório)  
+**Fonte de verdade:** `/docs/architecture.md`, `/docs/ai-context.md`, `/.github/copilot-instructions.md`
+
+---
+
+## Sumário Executivo
+
+| Indicador | Valor |
+|-----------|-------|
+| **Status geral de saúde** | ⚠️ NEEDS ATTENTION |
+| **Total de findings** | 7 |
+| **CRITICAL** | 0 |
+| **HIGH** | 1 |
+| **MEDIUM** | 1 |
+| **LOW** | 5 |
+| **Violações de contexto** | 0 |
+| **Cobertura de linha (JaCoCo)** | 83,67% — 41 de 49 linhas ✅ |
+| **Gate de cobertura (80%)** | PASSOU |
+
+O projeto está estruturalmente sólido: a Arquitetura Hexagonal está corretamente implementada, todas as DON'Ts críticas da fonte de verdade são respeitadas e o gate de cobertura de 80% passa com folga. O único risco que justifica atenção imediata é a ordem do stage de Trivy no pipeline Jenkins, que permite que uma imagem potencialmente vulnerável chegue ao registry privado antes de ser escaneada.
+
+---
+
+## Revisão de Arquitetura
+
+> Conformidade de camadas, aderência aos ADRs, integridade da Arquitetura Hexagonal (Ports & Adapters).
+
+### Arquivos Analisados
+
+| Arquivo | Camada |
+|---------|--------|
+| `domain/model/HelloMessage.java` | Domain |
+| `domain/port/in/HelloUseCase.java` | Domain — Driving Port |
+| `domain/port/out/HelloMessageProvider.java` | Domain — Driven Port |
+| `application/service/HelloService.java` | Application |
+| `infrastructure/adapter/in/rest/HelloController.java` | Infrastructure — In |
+| `infrastructure/adapter/in/rest/GlobalExceptionHandler.java` | Infrastructure — In |
+| `infrastructure/adapter/in/rest/dto/HelloResponse.java` | Infrastructure — In (DTO) |
+| `infrastructure/adapter/out/HelloAdapter.java` | Infrastructure — Out |
+| `infrastructure/config/MetricsConfig.java` | Infrastructure — Config |
+
+### Checklist ADR
+
+| ADR | Descrição | Status |
+|-----|-----------|--------|
+| ADR-1 | Arquitetura Hexagonal (Ports & Adapters) | ✅ Conforme |
+| ADR-2 | `record` para domain models e DTOs | ✅ Conforme |
+| ADR-3 | `ProblemDetail` RFC 9457 para todos os erros | ✅ Conforme |
+| ADR-4 | JaCoCo 80% LINE gate no CI | ✅ Conforme |
+| ADR-5 | Swagger UI desabilitado em produção | ✅ Conforme |
+| ADR-6 | Container non-root (`appuser` UID 1001) | ✅ Conforme |
+
+### Findings
+
+Nenhum finding. Todas as invariantes de camada e ADRs estão corretamente implementados:
+
+- `domain.*` e `application.*` não contêm nenhum `import com.baseapp.infrastructure.*`
+- `domain.model.HelloMessage` é um `record` com compact constructor validando invariantes
+- `domain.port.in.HelloUseCase` e `domain.port.out.HelloMessageProvider` são interfaces Java puras, sem anotações Spring
+- `HelloService` implementa corretamente `HelloUseCase` via `@Service` com injeção via construtor
+- O fluxo de requisição segue exatamente: `HelloController → HelloUseCase → HelloService → HelloMessageProvider → HelloAdapter`
+
+---
+
+## Qualidade de Código
+
+> Conformidade com padrões, enforcement das DON'Ts, logging, tratamento de exceções.
+
+### Arquivos Analisados
+
+`HelloController.java`, `HelloService.java`, `HelloAdapter.java`, `GlobalExceptionHandler.java`, `HelloResponse.java`, `MetricsConfig.java`
+
+### Checklist de Padrões
+
+| Padrão | Status | Evidência |
+|--------|--------|-----------|
+| Injeção via construtor (sem `@Autowired` em campos) | ✅ | Todos os `@Service`, `@Component`, `@Configuration` usam construtor |
+| Controller injeta porta de caso de uso, não o service diretamente | ✅ | `HelloController` injeta `HelloUseCase` (interface) |
+| Controller não retorna domain object | ✅ | Retorno é `ResponseEntity<HelloResponse>` (DTO) |
+| DTO usa static factory `from()` | ✅ | `HelloResponse.from(HelloMessage)` em linha 17 |
+| Acessores de record sem prefixo `get` | ✅ | `domain.message()`, `domain.timestamp()` |
+| Logging via SLF4J — zero `System.out.println` | ✅ | Scanner grep confirmou ausência total |
+| `GlobalExceptionHandler` usa `ProblemDetail` | ✅ | Ambos os handlers retornam `ProblemDetail` |
+| Handler 500 não chama `e.getMessage()` na resposta | ✅ | Retorna string genérica hardcoded |
+| Lógica de negócio ausente em controllers e adapters | ✅ | Controllers e adapters são puramente de infraestrutura |
+
+### Findings
+
+| Severidade | Arquivo | Linha | Finding |
+|------------|---------|-------|---------|
+| `LOW` | `HelloController.java` | 46–47 | Domain object atribuído a variável local antes do mapeamento para DTO. O padrão de referência nos docs usa one-liner. Ver detalhe abaixo. |
+
+**Detalhe L-1:** O método `hello()` usa:
+```java
+HelloMessage message = helloUseCase.execute();
+return ResponseEntity.ok(HelloResponse.from(message));
+```
+O padrão idiomático documentado em `copilot-instructions.md` é:
+```java
+return ResponseEntity.ok(HelloResponse.from(helloUseCase.execute()));
+```
+O código é funcionalmente correto e não viola nenhuma DON'T (o tipo de retorno é o DTO). A inconsistência é puramente estilística em relação ao padrão canônico.
+
+---
+
+## Build & Dependências
+
+> Configuração Gradle, saúde das dependências, gate de cobertura.
+
+### Arquivos Analisados
+
+`build.gradle`, `settings.gradle`, `gradle/wrapper/gradle-wrapper.properties`
+
+### Checklist
+
+| Item | Status | Evidência |
+|------|--------|-----------|
+| `jacocoTestCoverageVerification` com `minimum = 0.80` no counter `LINE` | ✅ | `build.gradle` linhas 57–68 |
+| Gradle fixado em versão específica | ✅ | `gradle-wrapper.properties`: `gradle-9.4.1-bin.zip` |
+| Sem versões SNAPSHOT ou globbing dinâmico nas dependências | ✅ | Todas as versões são fixas ou gerenciadas pelo Spring BOM |
+| `bootJar` produz `base-app.jar` | ✅ | `build.gradle` linha 71: `archiveFileName = 'base-app.jar'` |
+| `springBoot.buildInfo()` configurado | ✅ | `build.gradle` linha 77 |
+
+### Findings
+
+Nenhum finding.
+
+---
+
+## Pipeline CI/CD
+
+> Stages do Jenkins, quality gate, Trivy, estratégia de branch.
+
+### Arquivo Analisado
+
+`Jenkinsfile`
+
+### Stages identificados
+
+```
+Checkout → Set Environment → Test → Quality Gate → Build & Push → Security Scan → Approve Prod (prod only) → Deploy
+```
+
+### Mapeamento de branches
+
+| Branch | Ambiente | Hostname | Status |
+|--------|----------|----------|--------|
+| `main` | `prod` | `prod.app.local` | ✅ Conforme |
+| `release` | `staging` | `stg.app.local` | ✅ Conforme |
+| outros | `dev` | `dev.app.local` | ✅ Conforme |
+
+### Findings
+
+| Severidade | Arquivo | Stage | Finding |
+|------------|---------|-------|---------|
+| `HIGH` | `Jenkinsfile` | `Build & Push` → `Security Scan` | Trivy executa **após** o push da imagem ao registry. Imagem potencialmente vulnerável fica disponível no registry antes de ser escaneada. Ver detalhe H-1. |
+| `LOW` | `Jenkinsfile` | — | `architecture.md` descreve o pipeline com 6 stages (`Checkout → Set Environment → Test → Quality Gate → Build & Push → Deploy`), mas a implementação contém 8 stages (`Security Scan` e `Approve Prod` não documentados). Gap de documentação — sem impacto operacional. |
+
+**Detalhe H-1 (HIGH):**
+
+O stage `Build & Push` constrói e **envia** a imagem ao registry `192.168.0.106:5000` em uma única execução:
+```groovy
+stage('Build & Push') {
+    steps {
+        sh """
+        docker build -t ${IMAGE}:${TAG} .
+        docker tag  ${IMAGE}:${TAG} ${REGISTRY}/${IMAGE}:${TAG}
+        docker push ${REGISTRY}/${IMAGE}:${TAG}   // ← imagem já está no registry
+        """
+    }
+}
+
+stage('Security Scan') {       // ← Trivy roda DEPOIS do push
+    steps {
+        sh "docker run ... trivy image ... ${REGISTRY}/${IMAGE}:${TAG}"
+    }
+}
+```
+
+Se o Trivy falhar e detectar CVEs `HIGH` ou `CRITICAL` (`--exit-code 1`), o pipeline para — mas a imagem já está no registry e pode ser deployada manualmente ou referenciada por outras automações. O princípio de "shift security left" exige que a imagem seja escaneada **antes** do push.
+
+**Correção recomendada:** Separar o stage em `Build` (apenas `docker build` e `docker tag`) e `Push` (apenas `docker push`), inserindo o `Security Scan` entre eles — ou escanear a imagem localmente via `docker run -v /var/run/docker.sock:/var/run/docker.sock` antes do push.
+
+---
+
+## Infraestrutura & Docker
+
+> Segurança de containers, manifests Kubernetes, overlays Kustomize.
+
+### Arquivos Analisados
+
+`Dockerfile`, `k8s/base/deployment.yaml`, `k8s/base/service.yaml`, `k8s/base/ingress.yaml`, `k8s/base/kustomization.yaml`, todos os overlays `dev/`, `staging/`, `prod/`
+
+### Checklist ADR-6 — Container Security
+
+| Controle | Status | Evidência |
+|----------|--------|-----------|
+| Base image `eclipse-temurin:21-jre-alpine` | ✅ | `Dockerfile` linha 7 |
+| `apk upgrade --no-cache` antes de empacotar | ✅ | `Dockerfile` linha 11 |
+| Usuário non-root `appuser` (UID 1001) criado | ✅ | `Dockerfile` linha 11: `adduser -S -u 1001` |
+| `USER appuser` declarado | ✅ | `Dockerfile` linha 16 |
+| Pod `securityContext.runAsNonRoot: true` | ✅ | `deployment.yaml` linha 25 |
+| Pod `securityContext.runAsUser: 1001` | ✅ | `deployment.yaml` linha 26 |
+| Container `allowPrivilegeEscalation: false` | ✅ | `deployment.yaml` linha 44 |
+| Container `readOnlyRootFilesystem: true` | ✅ | `deployment.yaml` linha 45 |
+| Container `capabilities.drop: [ALL]` | ✅ | `deployment.yaml` linha 46–48 |
+| Volume `/tmp` montado como `emptyDir` | ✅ | `deployment.yaml` — necessário para Spring Boot nested JAR |
+
+### Checklist Kustomize Overlays
+
+| Overlay | `namespace.yaml` | `kustomization.yaml` | `hpa.yaml` | `pdb.yaml` |
+|---------|-----------------|---------------------|-----------|-----------|
+| `dev` | ✅ | ✅ | N/A | N/A |
+| `staging` | ✅ | ✅ | N/A | N/A |
+| `prod` | ✅ | ✅ | ✅ min 2 / max 5 | ✅ minAvailable 1 |
+
+### ADR-5 — Swagger desabilitado em produção
+
+`application-prod.yml` desabilita corretamente:
+```yaml
+springdoc:
+  swagger-ui:
+    enabled: false
+  api-docs:
+    enabled: false
+```
+
+### Findings
+
+Nenhum finding.
+
+---
+
+## Estratégia de Testes
+
+> Cobertura, padrões de teste, qualidade das assertivas, uso de contexto Spring.
+
+### Arquivos Analisados
+
+`HelloServiceTest.java`, `HelloControllerTest.java`, `GlobalExceptionHandlerTest.java`
+
+### Cobertura JaCoCo (relatório mais recente)
+
+| Classe | Linhas Cobertas | Linhas Perdidas | Cobertura |
+|--------|----------------|----------------|-----------|
+| `HelloService` | 9 | 0 | 100% |
+| `HelloController` | 7 | 0 | 100% |
+| `GlobalExceptionHandler` | 15 | 0 | 100% |
+| `HelloResponse` | 4 | 0 | 100% |
+| `HelloMessage` | 5 | 1 | 83% |
+| `BaseAppApplication` | 1 | 2 | 33% |
+| `MetricsConfig` | 0 | 3 | **0%** |
+| `HelloAdapter` | 0 | 2 | **0%** |
+| **TOTAL** | **41** | **8** | **83,67%** ✅ |
+
+> Gate: 80% — **PASSOU** (83,67% ≥ 80%)
+
+### Checklist de Testes
+
+| Item | Status | Evidência |
+|------|--------|-----------|
+| Service tests com `@ExtendWith(MockitoExtension.class)` | ✅ | `HelloServiceTest.java` linha 15 |
+| Controller tests com `@WebMvcTest` | ✅ | `HelloControllerTest.java` linha 20, `GlobalExceptionHandlerTest.java` linha 20 |
+| `@MockitoBean` (não `@MockBean`) | ✅ | Confirmado em ambos os controller tests |
+| Handler 500 não expõe `e.getMessage()` na resposta | ✅ | Resposta usa string genérica hardcoded |
+| Nenhum teste sem assertivas | ✅ | Todos os testes possuem ao menos uma assertiva ou `verify` |
+
+### Findings
+
+| Severidade | Arquivo | Linha | Finding |
+|------------|---------|-------|---------|
+| `MEDIUM` | `GlobalExceptionHandlerTest.java` | 36, 44 | Nomes de métodos invertem a convenção `method_shouldBehavior_whenCondition()` documentada em `ai-context.md`. |
+| `LOW` | `HelloServiceTest.java` | 33–38 | `execute_shouldDelegateToProviderExactlyOnce`: valor retornado descartado sem assertiva sobre o domain object construído. |
+| `LOW` | `HelloServiceTest.java` | 28, 33 | Nomes `execute_shouldReturnMessageWithTextFromProvider` e `execute_shouldDelegateToProviderExactlyOnce` omitem o segmento `_whenCondition`. |
+| `LOW` | `MetricsConfig.java` | — | 0% de cobertura: nenhum teste verifica a configuração de tags Micrometer. |
+| `LOW` | `HelloAdapter.java` | — | 0% de cobertura: `provideMessageText()` e construtor sem testes unitários. |
+
+**Detalhe M-1 (MEDIUM):**
+
+A convenção documentada em `ai-context.md` é `method_shouldBehavior_whenCondition()`.  
+Os métodos em `GlobalExceptionHandlerTest` usam o padrão invertido `whenCondition_shouldBehavior`:
+
+```java
+// ❌ Padrão atual (invertido)
+void whenIllegalArgumentException_shouldReturn400WithProblemDetail()
+void whenUnexpectedException_shouldReturn500WithGenericMessage()
+
+// ✅ Padrão correto conforme ai-context.md
+void handleIllegalArgument_shouldReturn400_whenIllegalArgumentExceptionIsThrown()
+void handleGeneric_shouldReturn500_whenUnexpectedExceptionIsThrown()
+```
+
+**Detalhe L-2 (LOW):**
+
+```java
+@Test
+void execute_shouldDelegateToProviderExactlyOnce() {
+    when(messageProvider.provideMessageText()).thenReturn("test");
+
+    helloService.execute();   // ← resultado descartado
+
+    verify(messageProvider, times(1)).provideMessageText();
+    // ← sem assertThat(result.message()) nem assertThat(result.timestamp())
+}
+```
+
+O teste é essencialmente um subconjunto de `execute_shouldReturnMessageWithTextFromProvider`, que já valida a contagem de chamadas. A ausência de assertiva sobre o `HelloMessage` retornado reduz o valor do teste como safety net de regressão.
+
+---
+
+## Principais Riscos
+
+> Top riscos com potencial de causar incidentes em produção ou bloquear releases.
+
+1. **[HIGH] Imagem vulnerável no registry antes do scan** — O stage `Security Scan` (Trivy) ocorre após `Build & Push`, permitindo que uma imagem com CVEs `HIGH`/`CRITICAL` fique disponível no registry `192.168.0.106:5000`. Deploy manual ou automação externa pode utilizar essa tag antes que a falha seja detectada. **Mitigação**: reordenar o pipeline para escanear antes do push, ou implementar um admission controller no cluster para bloquear imagens não-escaneadas.
+
+2. **[LOW] MetricsConfig sem cobertura de testes** — A correta configuração de tags Micrometer (`app`, `environment`, `version`) afeta todos os dashboards Grafana. Um erro de wiring nessa classe seria descoberto apenas em runtime, possivelmente gerando métricas sem os labels corretos em todos os ambientes.
+
+3. **[LOW] Convenção de nomenclatura de testes degradada** — A inconsistência introduzida em `GlobalExceptionHandlerTest` é um sinal de que a convenção pode tornar-se inconsistente à medida que novos testes forem adicionados, dificultando a triagem de falhas no Jenkins.
+
+---
+
+## Violações de Contexto
+
+> Findings que contradizem explicitamente a documentação fonte de verdade (ADRs, DON'Ts, copilot-instructions).
+
+Nenhuma violação de contexto identificada.
+
+Todas as DON'Ts da fonte de verdade foram verificadas e respeitadas:
+
+| DON'T | Verificado | Resultado |
+|-------|-----------|-----------|
+| `@Autowired` em campos de produção | ✅ | Não presente |
+| `@MockBean` em testes | ✅ | Não presente (todos usam `@MockitoBean`) |
+| `infrastructure.*` em `domain.*` ou `application.*` | ✅ | Não presente |
+| Spring annotations em interfaces de domínio | ✅ | Não presente |
+| Retornar domain objects de controllers | ✅ | Controllers retornam DTOs |
+| Lógica de negócio em controllers ou adapters | ✅ | Não presente |
+| `System.out.println` | ✅ | Não presente |
+| `e.getMessage()` em handlers 500 | ✅ | Handler 500 usa string genérica hardcoded |
+| Acessores de record com prefixo `get` | ✅ | Não presente |
+| Testes sem assertivas | ✅ | Todos possuem pelo menos uma assertiva ou `verify` |
+
+---
+
+## Recomendações Priorizadas
+
+| Prioridade | Área | Ação | Esforço |
+|------------|------|------|---------|
+| **P1** | CI/CD | Separar `Build & Push` em dois stages distintos (`Build` e `Push`); mover `Security Scan` para entre eles, garantindo que Trivy valide a imagem antes que seja enviada ao registry | Médio |
+| **P2** | Testes | Adicionar teste unitário para `MetricsConfig` verificando que as tags `app`, `environment` e `version` são configuradas corretamente no `MeterRegistry` | Baixo |
+| **P3** | Testes | Adicionar teste unitário para `HelloAdapter.provideMessageText()` verificando o valor retornado | Baixo |
+| **P4** | Testes | Renomear os dois métodos de teste em `GlobalExceptionHandlerTest` para seguirem a convenção `method_shouldBehavior_whenCondition()` | Baixo |
+| **P5** | Testes | Corrigir `execute_shouldDelegateToProviderExactlyOnce` em `HelloServiceTest`: adicionar `assertThat` sobre o `HelloMessage` retornado, e adicionar o sufixo `_whenCondition` aos dois nomes de teste | Baixo |
+| **P6** | Code Quality | Refatorar `HelloController.hello()` para one-liner: `return ResponseEntity.ok(HelloResponse.from(helloUseCase.execute()))` | Baixo |
+
+---
+
+## Roadmap Sugerido
+
+> Cada item referencia um finding específico deste relatório.
+
+### Imediato (esta sprint)
+
+- [ ] `[HIGH — CI/CD — Jenkinsfile]` Separar `Build & Push` em `Build` + `Push`; inserir `Security Scan` (Trivy) **entre** eles para impedir push de imagem vulnerável ao registry.
+
+### Curto prazo (1–2 sprints)
+
+- [ ] `[LOW — Testes — MetricsConfig.java]` Criar `MetricsConfigTest` com `@ExtendWith(MockitoExtension.class)` verificando as common tags Micrometer.
+- [ ] `[LOW — Testes — HelloAdapter.java]` Criar `HelloAdapterTest` verificando que `provideMessageText()` retorna a string esperada.
+- [ ] `[MEDIUM — Testes — GlobalExceptionHandlerTest.java]` Renomear `whenIllegalArgumentException_shouldReturn400WithProblemDetail` → `handleIllegalArgument_shouldReturn400_whenIllegalArgumentExceptionIsThrown` e `whenUnexpectedException_shouldReturn500WithGenericMessage` → `handleGeneric_shouldReturn500_whenUnexpectedExceptionIsThrown`.
+- [ ] `[LOW — Testes — HelloServiceTest.java]` Adicionar assertiva sobre o `HelloMessage` retornado em `execute_shouldDelegateToProviderExactlyOnce`; ajustar os dois nomes de teste com sufixo `_when{Condition}`.
+
+### Médio prazo (próximo trimestre)
+
+- [ ] `[LOW — Code Quality — HelloController.java]` Refatorar `hello()` para one-liner idiomático conforme padrão de referência dos docs.
+- [ ] `[LOW — CI/CD — architecture.md]` Documentar os stages `Security Scan` e `Approve Prod` em `architecture.md` para alinhar documentação à implementação real do pipeline.
+
+---
+
+_Gerado por project-audit skill v1.0.0 · Fonte de verdade: `/docs/architecture.md`, `/docs/ai-context.md`, `/.github/copilot-instructions.md`_
