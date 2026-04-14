@@ -76,14 +76,18 @@ pipeline {
         // Trivy roda via Docker — nenhuma instalação necessária no agente.
         // --insecure: aceita o registry local sem TLS (IP + porta 5000).
         // --exit-code 1: falha o pipeline em vulnerabilidades HIGH ou CRITICAL.
-        // Imagem oficial migrou do Docker Hub (aquasec/trivy) para o GHCR.
+        // trivy-cache montado como volume nomeado: o DB (~90 MB) é baixado
+        // apenas na primeira execução e reutilizado nas seguintes.
+        // --timeout 15m: evita falha por download lento do DB de vulnerabilidades.
         stage('Security Scan') {
             steps {
                 sh """
                 docker run --rm --network host \
+                  -v trivy-cache:/root/.cache/trivy \
                   ghcr.io/aquasecurity/trivy:latest image \
                   --exit-code 1 \
                   --severity HIGH,CRITICAL \
+                  --timeout 15m \
                   --insecure \
                   ${REGISTRY}/${IMAGE}:${TAG}
                 """
