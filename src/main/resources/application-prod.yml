@@ -1,0 +1,12 @@
+# Perfil 'prod' — sobrepõe application.yml apenas nas propriedades listadas aqui.
+# Ativado via: SPRING_PROFILES_ACTIVE=prod (definido em k8s/overlays/prod/config.env)
+
+springdoc:
+  # Swagger UI desabilitado em produção por segurança:
+  # expor documentação interativa da API aumenta a superfície de ataque.
+  # A especificação OpenAPI (/v3/api-docs) também é desabilitada para evitar
+  # enumeração de endpoints por agentes maliciosos.
+  swagger-ui:
+    enabled: false
+  api-docs:
+    enabled: false

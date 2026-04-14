@@ -7,7 +7,7 @@ echo "🧪 Testando pipeline localmente..."
 # CONFIG
 # -----------------------------
 ENVIRONMENT=${ENVIRONMENT:-dev}
-BUILD_NUMBER=${BUILD_NUMBER:-1}
+BUILD_NUMBER=${BUILD_NUMBER:-$(git rev-parse --short HEAD)}
 REGISTRY=${REGISTRY:-192.168.0.106:5000}
 IMAGE=${IMAGE:-app}
 TAG="${BUILD_NUMBER}-${ENVIRONMENT}"

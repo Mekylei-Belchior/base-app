@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+
+    <!--
+      logback-spring.xml — suporte nativo a <springProfile> (requer Spring Boot).
+      Dois perfis:
+        - !prod (dev, staging, local): console colorido e legível para humanos
+        - prod               : JSON estruturado para stdout, coletado por Fluentd/Loki
+
+      IMPORTANTE: incluir defaults.xml é obrigatório para registrar os conversores
+      proprietários do Spring Boot (%clr, %wEx) — sem isso o logback falha ao
+      inicializar mesmo em contextos de teste.
+    -->
+    <include resource="org/springframework/boot/logging/logback/defaults.xml"/>
+
+    <!-- ── Dev / staging / local — console legível ──────────────────────── -->
+    <springProfile name="!prod">
+        <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+            <encoder>
+                <!--
+                  %clr(...){color}: coloração automática por nível de log.
+                  Layout legível para desenvolvimento local e ambientes não-prod.
+                  %wEx: stacktrace compacto (Spring Boot extended whitespace).
+                -->
+                <pattern>%clr(%d{HH:mm:ss.SSS}){faint} %clr(%5p){highlight} %clr(---){faint} %clr([%15.15t]){faint} %clr(%-40.40logger{39}){cyan} : %msg%n%wEx</pattern>
+                <charset>UTF-8</charset>
+            </encoder>
+        </appender>
+
+        <root level="INFO">
+            <appender-ref ref="CONSOLE"/>
+        </root>
+    </springProfile>
+
+    <!-- ── Prod — JSON estruturado para coleta centralizada ─────────────── -->
+    <springProfile name="prod">
+        <appender name="JSON" class="ch.qos.logback.core.ConsoleAppender">
+            <encoder class="net.logstash.logback.encoder.LogstashEncoder">
+                <!--
+                  Campos adicionados a cada linha JSON:
+                    - app         : nome do serviço (útil em clusters multi-serviço)
+                    - environment : 'prod' (propagado via config.env / SPRING_PROFILES_ACTIVE)
+                  Outros campos como level, logger, thread, message, stack_trace
+                  são incluídos automaticamente pelo LogstashEncoder.
+                -->
+                <customFields>{"app":"base-app","environment":"prod"}</customFields>
+                <!-- Inclui stacktrace completo no campo 'stack_trace' em vez de quebrar linhas -->
+                <throwableConverter class="net.logstash.logback.stacktrace.ShortenedThrowableConverter">
+                    <maxDepthPerCause>20</maxDepthPerCause>
+                    <rootCauseFirst>true</rootCauseFirst>
+                </throwableConverter>
+            </encoder>
+        </appender>
+
+        <root level="INFO">
+            <appender-ref ref="JSON"/>
+        </root>
+    </springProfile>
+
+</configuration>

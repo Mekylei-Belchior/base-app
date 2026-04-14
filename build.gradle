@@ -25,7 +25,14 @@ repositories {
 
 dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-web'
+    implementation 'org.springframework.boot:spring-boot-starter-validation'
     implementation 'org.springframework.boot:spring-boot-starter-actuator'
+    // Expõe /actuator/prometheus — gerenciado pelo BOM do Spring Boot (sem versão)
+    implementation 'io.micrometer:micrometer-registry-prometheus'
+    // Logs JSON para prod (Fluentd/Loki/ELK); versão explícita pois não está no BOM
+    implementation 'net.logstash.logback:logstash-logback-encoder:8.1'
+    // Swagger UI + OpenAPI 3 — versão explícita pois não está no BOM
+    implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.8.6'
 
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
 }
@@ -62,4 +69,11 @@ jacocoTestCoverageVerification {
 
 bootJar {
     archiveFileName = 'base-app.jar'
+}
+
+// Gera META-INF/build-info.properties empacotado no JAR.
+// Spring Boot lê esse arquivo e expõe as propriedades com prefixo 'build.*'.
+// Usado pelo /actuator/info e pelo MetricsConfig para a tag 'version'.
+springBoot {
+    buildInfo()
 }

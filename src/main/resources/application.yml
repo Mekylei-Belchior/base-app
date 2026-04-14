@@ -12,8 +12,8 @@ management:
   endpoints:
     web:
       exposure:
-        # Expõe apenas health e info para reduzir superfície de ataque
-        include: "health,info"
+        # prometheus: consumido pelo Prometheus/Grafana para métricas da JVM e app
+        include: "health,info,prometheus"
   endpoint:
     health:
       # Nunca expõe detalhes internos (env, DB credentials, etc.)
@@ -26,3 +26,10 @@ management:
       enabled: true
     readinessstate:
       enabled: true
+
+# Documentação da API via Springdoc OpenAPI (Swagger UI)
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+  api-docs:
+    path: /v3/api-docs
