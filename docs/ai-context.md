@@ -3,239 +3,149 @@
 > For system architecture, ADRs, and deployment topology, see [/docs/architecture.md](architecture.md).
 
 ---
-
 ## Quick Reference
 
-- **Package root:** `com.baseapp`
-- **Java:** 21 | **Spring Boot:** 3.4.5 | **Build:** Gradle
+- **Package root:** `com.baseapp` | Java 21 | Spring Boot 3.4.5
 - **Layer rule:** `domain` and `application` have **zero** imports from `infrastructure`
-- **Coverage gate:** 80% LINE minimum (JaCoCo)
+- **Coverage gate:** 80% LINE (JaCoCo)
 
-### Package map
 ```
 domain.model          → immutable records (value objects)
 domain.port.in        → driving port interfaces (use cases)
 domain.port.out       → driven port interfaces (outbound contracts)
-application.service   → @Service classes implementing use case ports
-infrastructure.adapter.in.rest  → @RestController + DTOs
-infrastructure.adapter.out      → @Component adapters (DB, config, APIs)
-infrastructure.config           → @Configuration classes
+application.service   → @Service implementing use case ports
+infrastructure.adapter.in.rest → @RestController + DTOs
+infrastructure.adapter.out     → @Component adapters (DB, APIs, config)
+infrastructure.config          → @Configuration classes
 ```
 
 ---
-
 ## Code Patterns
 
-### Domain model — use `record` with compact constructor validation
-
+**Domain model** — `record` + compact constructor validation:
 ```java
-// DO
 public record HelloMessage(String message, Instant timestamp) {
     public HelloMessage {
-        Objects.requireNonNull(message, "A mensagem não pode ser nula");
-        if (message.isBlank()) throw new IllegalArgumentException("...");
-        Objects.requireNonNull(timestamp, "...");
+        Objects.requireNonNull(message, "message is required");
+        if (message.isBlank()) throw new IllegalArgumentException("message cannot be blank");
+        Objects.requireNonNull(timestamp, "timestamp is required");
     }
 }
-
-// DON'T — mutable class or no validation
-public class HelloMessage {
-    private String message; // ❌ mutable
-}
 ```
 
-### Ports — plain interfaces, no Spring annotations
-
+**Ports** — plain interfaces, no Spring:
 ```java
-// DO — driving port
-public interface HelloUseCase {
-    HelloMessage execute();
-}
-
-// DO — driven port
-public interface HelloMessageProvider {
-    String provideMessageText(); // returns raw data; domain object is built in the service
-}
-
-// DON'T — Spring annotations on domain interfaces
-public interface HelloUseCase {
-    @Transactional // ❌ infrastructure concern in domain
-    HelloMessage execute();
-}
+public interface HelloUseCase { HelloMessage execute(); }
+public interface HelloMessageProvider { String provideMessageText(); } // raw data only
 ```
-
-### Application service — constructor injection, implements use case
-
+**Service** — `@Service`, constructor injection, builds domain object:
 ```java
-// DO
 @Service
 public class HelloService implements HelloUseCase {
     private static final Logger log = LoggerFactory.getLogger(HelloService.class);
     private final HelloMessageProvider messageProvider;
-
-    public HelloService(HelloMessageProvider messageProvider) {
-        this.messageProvider = messageProvider;
-    }
+    public HelloService(HelloMessageProvider messageProvider) { this.messageProvider = messageProvider; }
 
     @Override
     public HelloMessage execute() {
         log.debug("Executando HelloUseCase");
-        String text = messageProvider.provideMessageText();
-        return new HelloMessage(text, Instant.now());
+        return new HelloMessage(messageProvider.provideMessageText(), Instant.now());
     }
-}
-
-// DON'T — inject repository/JPA directly into service
-@Service
-public class HelloService {
-    @Autowired // ❌ field injection
-    private SomeRepository repo;
 }
 ```
 
-### REST controller — delegates to use case, maps domain → DTO
-
+**Controller** — injects use case, returns DTO:
 ```java
-// DO
 @RestController
 @RequestMapping("/hello")
 public class HelloController {
+    private static final Logger log = LoggerFactory.getLogger(HelloController.class);
     private final HelloUseCase helloUseCase;
-
-    public HelloController(HelloUseCase helloUseCase) { // constructor injection
-        this.helloUseCase = helloUseCase;
-    }
+    public HelloController(HelloUseCase helloUseCase) { this.helloUseCase = helloUseCase; }
 
     @GetMapping
     public ResponseEntity<HelloResponse> hello() {
         log.info("GET /hello");
-        HelloMessage message = helloUseCase.execute();
-        return ResponseEntity.ok(HelloResponse.from(message)); // domain → DTO here
+        return ResponseEntity.ok(HelloResponse.from(helloUseCase.execute()));
     }
-}
-
-// DON'T — business logic in controller, return domain object directly
-@GetMapping
-public HelloMessage hello() { // ❌ exposes domain type
-    return new HelloMessage("...", Instant.now()); // ❌ logic belongs in service
 }
 ```
 
-### DTO — `record` with a static factory `from(DomainObject)`
-
+**DTO** — `record` + static factory:
 ```java
-// DO
 public record HelloResponse(String message, String timestamp) {
-    public static HelloResponse from(HelloMessage domain) {
-        return new HelloResponse(domain.message(), domain.timestamp().toString());
+    public static HelloResponse from(HelloMessage d) {
+        return new HelloResponse(d.message(), d.timestamp().toString()); // d.message() not d.getMessage()
     }
 }
-
-// Record accessor syntax: domain.message() — NOT domain.getMessage()
 ```
 
-### Outbound adapter — implements driven port, may use Spring
-
+**Outbound adapter** — `@Component implements` driven port:
 ```java
-// DO
 @Component
 public class HelloAdapter implements HelloMessageProvider {
     @Override
-    public String provideMessageText() {
-        return "Hello from k3s 🚀"; // or DB/config/remote call
-    }
+    public String provideMessageText() { return "Hello from k3s 🚀"; }
+    // may use @Value, JPA, WebClient — infrastructure stays here
 }
-// May use @Value, JPA, WebClient etc. — infrastructure concerns belong here
 ```
 
-### Exception handling — `@RestControllerAdvice` + `ProblemDetail`
-
+**Exception handler** — `ProblemDetail`, never leak internals:
 ```java
-// DO — use RFC 9457 ProblemDetail, never leak stack traces
 @ExceptionHandler(IllegalArgumentException.class)
-public ResponseEntity<ProblemDetail> handleIllegalArgument(IllegalArgumentException e) {
-    log.warn("Erro de requisição: {}", e.getMessage());
-    ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, e.getMessage());
-    problem.setType(URI.create("about:blank"));
-    problem.setTitle("Requisição Inválida");
-    problem.setProperty("timestamp", Instant.now());
-    return ResponseEntity.badRequest().body(problem);
+public ResponseEntity<ProblemDetail> handle(IllegalArgumentException e) {
+    log.warn("bad request: {}", e.getMessage());
+    ProblemDetail p = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, e.getMessage());
+    p.setType(URI.create("about:blank"));
+    p.setProperty("timestamp", Instant.now());
+    return ResponseEntity.badRequest().body(p);
 }
-
-// DON'T — expose internal detail on 500
-@ExceptionHandler(Exception.class)
-public ResponseEntity<String> handleError(Exception e) {
-    return ResponseEntity.internalServerError().body(e.getMessage()); // ❌ leaks internals
-}
+// 500 handler: always return generic message — never e.getMessage()
 ```
 
-### Logging — SLF4J, no System.out
-
+**Logging:**
 ```java
 private static final Logger log = LoggerFactory.getLogger(MyClass.class);
-
-log.debug("Executando lógica X");           // trace/debug
-log.info("POST /resource id={}", id);       // HTTP entry points
-log.warn("Dado inválido: {}", msg);         // recoverable bad input
-log.error("Erro inesperado", exception);    // unexpected — include exception
-// NEVER: System.out.println(...)
+log.debug("detail");  log.info("GET /x id={}", id);  log.warn("msg: {}", msg);  log.error("error", ex);
+// NEVER System.out.println
 ```
 
 ---
-
 ## Testing Patterns
 
-### Service unit test — `@ExtendWith(MockitoExtension.class)`, no Spring context
-
+**Service** — no Spring context:
 ```java
 @ExtendWith(MockitoExtension.class)
 class HelloServiceTest {
-
     @Mock HelloMessageProvider messageProvider;
-    HelloService sut;   // system under test
-
-    @BeforeEach
-    void setUp() { sut = new HelloService(messageProvider); }
+    HelloService sut;
+    @BeforeEach void setUp() { sut = new HelloService(messageProvider); }
 
     @Test
-    void execute_shouldReturnMessageWithTextFromProvider() {
+    void execute_shouldReturnMessage_whenProviderReturnsText() {
         when(messageProvider.provideMessageText()).thenReturn("Hello");
         HelloMessage result = sut.execute();
-        assertThat(result.message()).isEqualTo("Hello");  // record accessor, no "get"
+        assertThat(result.message()).isEqualTo("Hello");   // record accessor, no "get"
         assertThat(result.timestamp()).isNotNull();
         verify(messageProvider, times(1)).provideMessageText();
     }
 }
 ```
 
-### Controller test — `@WebMvcTest`, mock use case with `@MockitoBean`
-
+**Controller + exception handler** — `@WebMvcTest`, `@MockitoBean` (not `@MockBean`):
 ```java
-@WebMvcTest(HelloController.class)
+@WebMvcTest(HelloController.class)           // loads @RestControllerAdvice automatically
 class HelloControllerTest {
-
     @Autowired MockMvc mockMvc;
-    @MockitoBean HelloUseCase helloUseCase;  // NOT @MockBean (deprecated in Boot 3.4)
+    @MockitoBean HelloUseCase helloUseCase;
 
     @Test
-    void getHello_shouldReturn200WithJson() throws Exception {
+    void getHello_shouldReturn200() throws Exception {
         when(helloUseCase.execute()).thenReturn(new HelloMessage("Hi", Instant.now()));
         mockMvc.perform(get("/hello"))
                 .andExpect(status().isOk())
-                .andExpect(content().contentType(MediaType.APPLICATION_JSON))
-                .andExpect(jsonPath("$.message").value("Hi"))
-                .andExpect(jsonPath("$.timestamp").exists());
+                .andExpect(jsonPath("$.message").value("Hi"));
     }
-}
-```
-
-### Exception handler test — trigger via controller, no direct instantiation
-
-```java
-// @WebMvcTest loads @RestControllerAdvice automatically
-@WebMvcTest(HelloController.class)
-class GlobalExceptionHandlerTest {
-    @MockitoBean HelloUseCase helloUseCase;
 
     @Test
     void whenIllegalArgument_shouldReturn400() throws Exception {
@@ -248,77 +158,39 @@ class GlobalExceptionHandlerTest {
 }
 ```
 
-### Test naming convention
-
-```
-methodName_shouldExpectedBehavior_whenCondition()
-// e.g.: execute_shouldReturnMessage_whenProviderReturnsText
-// e.g.: execute_shouldDelegateToProviderExactlyOnce
-```
+**Test naming:** `method_shouldBehavior_whenCondition()`
 
 ---
-
-## Build Commands
+## Build
 
 ```bash
-./gradlew test                            # compile + run tests + JaCoCo HTML report
-./gradlew bootJar                         # fat JAR → build/libs/base-app.jar
-./gradlew jacocoTestCoverageVerification  # enforce 80% LINE coverage gate
+./gradlew test                            # tests + JaCoCo report
+./gradlew bootJar                         # → build/libs/base-app.jar
+./gradlew jacocoTestCoverageVerification  # enforce 80% LINE gate
 ```
 
 ---
+## DON'Ts (critical)
 
-## Configuration Reference (for code generation)
-
-- Active profile: `application.yml` (default) + `application-prod.yml` (prod overrides)
-- Env var to set environment: `APP_ENV=dev|staging|prod`
-- Prod disables Swagger (`springdoc.swagger-ui.enabled: false`) and `/v3/api-docs`
-- Health details: always `show-details: never`
-- Actuator exposed endpoints: `health`, `info`, `prometheus`
-
----
-
-## DOs and DON'Ts
-
-### Layer rules
-- **DO** keep `domain.model` and `domain.port.*` free of any Spring annotations
-- **DO** add new use cases: interface in `domain.port.in` → `@Service` in `application.service`
-- **DO** add new outbound adapters: interface in `domain.port.out` → `@Component` in `infrastructure.adapter.out`
-- **DON'T** import `infrastructure.*` anywhere in `domain.*` or `application.*`
-- **DON'T** put business logic in controllers or adapters
-
-### Code style
-- **DO** use `record` for all value objects and DTOs
-- **DO** use constructor injection everywhere — never `@Autowired` on fields
-- **DO** use SLF4J: `LoggerFactory.getLogger(MyClass.class)` — never `System.out`
-- **DO** return `ResponseEntity<T>` from all controller methods
-- **DON'T** use `@MockBean` — use `@MockitoBean` (Spring Boot 3.4+)
-- **DON'T** add `get` prefix to record accessors — `record.message()` not `record.getMessage()`
-
-### Security
-- **DON'T** log credentials, tokens, or PII
-- **DON'T** return exception messages or stack traces in 500 responses
-- **DO** validate domain invariants in compact constructors (`Objects.requireNonNull`, `IllegalArgumentException`)
-- **DO** use `ProblemDetail` for all exception handler responses — never raw strings
-
-### Testing
-- **DO** test services with `@ExtendWith(MockitoExtension.class)` — no Spring context loaded
-- **DO** test controllers with `@WebMvcTest` — web layer only
-- **DO** use `assertThat(...)` from AssertJ — not JUnit `assertEquals`
-- **DON'T** start full `ApplicationContext` in unit tests
-- **DON'T** write tests without assertions
+- ❌ `@Autowired` on fields — constructor injection only
+- ❌ `@MockBean` — use `@MockitoBean` (Boot 3.4+)
+- ❌ `infrastructure.*` imports in `domain.*` or `application.*`
+- ❌ Spring annotations (`@Transactional`, `@Service`, etc.) on domain interfaces
+- ❌ Return domain objects from controllers — always map to DTO
+- ❌ Business logic in controllers or adapters
+- ❌ `System.out.println` — SLF4J only
+- ❌ `e.getMessage()` in 500 handlers — return generic message
+- ❌ Record accessors with `get` prefix — `record.name()` not `record.getName()`
+- ❌ Tests without assertions
 
 ---
-
 ## New Feature Checklist
 
-Steps to add a new domain feature (e.g., `Greeting`):
-
-1. `domain/model/Greeting.java` — record with compact constructor validation
-2. `domain/port/in/GreetingUseCase.java` — plain interface (no annotations)
-3. `domain/port/out/GreetingRepository.java` — plain interface, if outbound data needed
-4. `application/service/GreetingService.java` — `@Service implements GreetingUseCase`, constructor-injects outbound port
-5. `infrastructure/adapter/out/GreetingAdapter.java` — `@Component implements GreetingRepository`
-6. `infrastructure/adapter/in/rest/dto/GreetingResponse.java` — record with `static from(Greeting domain)`
-7. `infrastructure/adapter/in/rest/GreetingController.java` — `@RestController`, injects `GreetingUseCase`
-8. Tests: `GreetingServiceTest` (`@ExtendWith(MockitoExtension.class)`) + `GreetingControllerTest` (`@WebMvcTest`)
+1. `domain/model/Foo.java` — record + compact constructor
+2. `domain/port/in/FooUseCase.java` — plain interface
+3. `domain/port/out/FooRepository.java` — plain interface (if data needed)
+4. `application/service/FooService.java` — `@Service implements FooUseCase`
+5. `infrastructure/adapter/out/FooAdapter.java` — `@Component implements FooRepository`
+6. `infrastructure/adapter/in/rest/dto/FooResponse.java` — record + `from(Foo)`
+7. `infrastructure/adapter/in/rest/FooController.java` — `@RestController`
+8. `FooServiceTest` (`@ExtendWith(MockitoExtension.class)`) + `FooControllerTest` (`@WebMvcTest`)
