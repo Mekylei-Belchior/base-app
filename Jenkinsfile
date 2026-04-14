@@ -28,7 +28,8 @@ pipeline {
                         env.ENVIRONMENT = 'dev'
                         env.APP_HOST    = 'dev.app.local'
                     }
-                    env.TAG = "${BUILD_NUMBER}-${env.ENVIRONMENT}"
+                    env.TAG       = "${BUILD_NUMBER}-${env.ENVIRONMENT}"
+                    env.NAMESPACE = "base-app-${env.ENVIRONMENT}"
                 }
             }
         }
@@ -109,7 +110,8 @@ pipeline {
                 cd "\$TMP/k8s/overlays/${env.ENVIRONMENT}"
                 kustomize edit set image ${IMAGE}=${REGISTRY}/${IMAGE}:${TAG}
                 kubectl apply -k .
-                kubectl rollout status deployment/${IMAGE}-${env.ENVIRONMENT} --timeout=5m
+                kubectl rollout status deployment/${IMAGE}-${env.ENVIRONMENT} \\
+                  --namespace=${env.NAMESPACE} --timeout=5m
                 rm -rf "\$TMP"
                 """
             }
@@ -129,8 +131,8 @@ pipeline {
 
     post {
         failure {
-            sh "kubectl rollout undo deployment/${IMAGE}-${env.ENVIRONMENT} || true"
-            echo "Deploy falhou — rollback executado para ${IMAGE}-${env.ENVIRONMENT}"
+            sh "kubectl rollout undo deployment/${IMAGE}-${env.ENVIRONMENT} --namespace=${env.NAMESPACE} || true"
+            echo "Deploy falhou — rollback executado para ${IMAGE}-${env.ENVIRONMENT} em ${env.NAMESPACE}"
         }
         always {
             sh 'docker image prune -f || true'

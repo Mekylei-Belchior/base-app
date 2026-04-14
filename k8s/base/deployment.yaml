@@ -4,6 +4,13 @@ metadata:
   name: app
 spec:
   replicas: 1
+  # RollingUpdate com maxUnavailable: 0 garante zero downtime:
+  # uma nova réplica é criada e validada ANTES de remover a antiga.
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
   selector:
     matchLabels:
       app: app

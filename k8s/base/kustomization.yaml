@@ -2,3 +2,15 @@ resources:
   - deployment.yaml
   - service.yaml
   - ingress.yaml
+
+# Labels recomendados pelo Kubernetes (app.kubernetes.io/*) aplicados a todos
+# os recursos, pod templates e selectors.
+# includeSelectors: true replica o comportamento do antigo 'commonLabels'.
+# ATENÇÃO: altera spec.selector nos Deployments (campo imutável) — se já houver
+# um Deployment rodando com selector diferente, delete-o antes de reaplicar.
+labels:
+  - pairs:
+      app.kubernetes.io/name: base-app
+      app.kubernetes.io/managed-by: kustomize
+    includeSelectors: true
+    includeTemplates: true

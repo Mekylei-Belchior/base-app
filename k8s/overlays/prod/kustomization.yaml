@@ -1,5 +1,12 @@
 resources:
   - ../../base
+  - namespace.yaml
+  # PodDisruptionBudget: protege contra indisponibilidade durante manutenções.
+  - pdb.yaml
+  # HorizontalPodAutoscaler: escala automática por CPU (2–5 réplicas).
+  - hpa.yaml
+
+namespace: base-app-prod
 
 nameSuffix: -prod
 

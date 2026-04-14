@@ -3,7 +3,8 @@ kind: Deployment
 metadata:
   name: app
 spec:
-  replicas: 3
+  # replicas removido: o HPA assume o controle (minReplicas: 2, maxReplicas: 5).
+  # Manter replicas fixo conflita com o HPA e causa oscilações desnecessárias.
   template:
     spec:
       containers:

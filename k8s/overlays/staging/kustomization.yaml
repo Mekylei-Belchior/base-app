@@ -1,5 +1,8 @@
 resources:
   - ../../base
+  - namespace.yaml
+
+namespace: base-app-staging
 
 nameSuffix: -staging
 

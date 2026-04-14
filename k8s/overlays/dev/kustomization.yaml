@@ -1,5 +1,9 @@
 resources:
   - ../../base
+  # Namespace criado declarativamente junto com os demais recursos do overlay.
+  - namespace.yaml
+
+namespace: base-app-dev
 
 nameSuffix: -dev
 

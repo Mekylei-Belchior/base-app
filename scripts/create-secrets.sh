@@ -23,17 +23,16 @@ ENVIRONMENT="${ENVIRONMENT:-dev}"
 
 # ---------------------------------------------------------------------------
 # Mapeamento de namespaces por ambiente.
-# Ajuste aqui caso criado namespaces específicos.
 # ---------------------------------------------------------------------------
 case "$ENVIRONMENT" in
   dev)
-    NAMESPACE="default"
+    NAMESPACE="base-app-dev"
     ;;
   staging)
-    NAMESPACE="default"
+    NAMESPACE="base-app-staging"
     ;;
   prod)
-    NAMESPACE="default"
+    NAMESPACE="base-app-prod"
     ;;
   *)
     echo "❌ Ambiente inválido: '$ENVIRONMENT'. Use: dev | staging | prod"

@@ -2,6 +2,10 @@ apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: app
+  annotations:
+    # Declara explicitamente o Traefik como ingress controller (padrão do k3s).
+    # Necessário quando há múltiplos controllers instalados no cluster.
+    kubernetes.io/ingress.class: traefik
 spec:
   rules:
     - host: app.local

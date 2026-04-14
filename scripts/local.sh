@@ -11,6 +11,7 @@ BUILD_NUMBER=${BUILD_NUMBER:-1}
 REGISTRY=${REGISTRY:-192.168.0.106:5000}
 IMAGE=${IMAGE:-app}
 TAG="${BUILD_NUMBER}-${ENVIRONMENT}"
+NAMESPACE="base-app-${ENVIRONMENT}"
 
 echo "🌍 Ambiente: $ENVIRONMENT"
 echo "🏷️ Tag: $TAG"
@@ -92,7 +93,7 @@ cd - > /dev/null  # volta ao diretório original do projeto
 
 # Aguarda rollout
 echo "⏳ Aguardando rollout..."
-kubectl rollout status deployment/app-${ENVIRONMENT}
+kubectl rollout status deployment/app-${ENVIRONMENT} --namespace="$NAMESPACE"
 
 rm -rf "$TMP_DIR"
 
@@ -101,7 +102,7 @@ rm -rf "$TMP_DIR"
 # -----------------------------
 echo "🌐 Testando aplicação..."
 
-kubectl port-forward service/app-${ENVIRONMENT} 18080:80 >/dev/null 2>&1 &
+kubectl port-forward service/app-${ENVIRONMENT} 18080:80 --namespace="$NAMESPACE" >/dev/null 2>&1 &
 PF_PID=$!
 sleep 5
 
@@ -121,10 +122,10 @@ kill $PF_PID 2>/dev/null || true
 # LOGS
 # -----------------------------
 echo "📊 Logs do pod:"
-POD=$(kubectl get pod -l app=app -o name | head -1 || true)
+POD=$(kubectl get pod -l app=app --namespace="$NAMESPACE" -o name | head -1 || true)
 
 if [ -n "$POD" ]; then
-    kubectl logs "$POD"
+    kubectl logs "$POD" --namespace="$NAMESPACE"
 else
     echo "Nenhum pod encontrado!"
 fi

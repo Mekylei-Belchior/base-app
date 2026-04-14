@@ -1,0 +1,11 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: app
+spec:
+  # Garante ao menos 1 réplica disponível durante manutenções de nó (drain).
+  # Impede que kubectl drain remova todas as réplicas simultaneamente.
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: base-app
