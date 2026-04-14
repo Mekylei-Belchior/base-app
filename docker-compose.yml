@@ -26,6 +26,7 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
       - /usr/bin/docker:/usr/bin/docker
       - /usr/local/bin/kubectl:/usr/local/bin/kubectl
+      - /usr/local/bin/kustomize:/usr/local/bin/kustomize
       - /home/dell/.kube/config-jenkins:/root/.kube/config
     user: root
     extra_hosts:

@@ -98,10 +98,9 @@ pipeline {
             }
         }
 
-        // ─── Deploy — kustomize edit set image (sem sed) ─────────────
+        // ─── Deploy — kustomize edit set image (semântico, idempotente) ────────
         // Trabalhamos numa cópia temporária para não alterar os arquivos do repo.
-        // kustomize edit set image modifica apenas o campo images[], de forma
-        // idempotente e semântica — não é uma substituição cega de texto.
+        // kustomize montado no host via docker-compose.yml.
         stage('Deploy') {
             steps {
                 sh """
