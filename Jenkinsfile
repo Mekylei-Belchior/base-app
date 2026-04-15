@@ -61,20 +61,19 @@ pipeline {
             }
         }
 
-        // ─── Build & Push — docker build só copia o JAR — sem Gradle dentro do Docker ─
-        stage('Build & Push') {
+        // ─── Build — docker build só copia o JAR — sem Gradle dentro do Docker ──────────
+        stage('Build') {
             steps {
                 sh """
                 docker build -t ${IMAGE}:${TAG} .
                 docker tag ${IMAGE}:${TAG} ${REGISTRY}/${IMAGE}:${TAG}
-                docker push ${REGISTRY}/${IMAGE}:${TAG}
                 """
             }
         }
 
-        // ─── Security Scan ────────────────────────────────────────────
-        // Trivy roda via Docker — nenhuma instalação necessária no agente.
-        // --insecure: aceita o registry local sem TLS (IP + porta 5000).
+        // ─── Security Scan ─────────────────────────────────────────────────────────────────
+        // Trivy escaneia a imagem LOCAL antes do push ao registry (shift-left).
+        // Docker socket montado para acesso às imagens locais do agente.
         // --exit-code 1: falha o pipeline em vulnerabilidades HIGH ou CRITICAL.
         // trivy-cache montado como volume nomeado: o DB (~90 MB) é baixado
         // apenas na primeira execução e reutilizado nas seguintes.
@@ -82,15 +81,22 @@ pipeline {
         stage('Security Scan') {
             steps {
                 sh """
-                docker run --rm --network host \
+                docker run --rm \
+                  -v /var/run/docker.sock:/var/run/docker.sock \
                   -v trivy-cache:/root/.cache/trivy \
                   ghcr.io/aquasecurity/trivy:latest image \
                   --exit-code 1 \
                   --severity HIGH,CRITICAL \
                   --timeout 15m \
-                  --insecure \
-                  ${REGISTRY}/${IMAGE}:${TAG}
+                  ${IMAGE}:${TAG}
                 """
+            }
+        }
+
+        // ─── Push — envia ao registry apenas após scan de segurança aprovado ──────────────
+        stage('Push') {
+            steps {
+                sh "docker push ${REGISTRY}/${IMAGE}:${TAG}"
             }
         }
 

@@ -29,7 +29,7 @@ class GlobalExceptionHandlerTest {
     private HelloUseCase helloUseCase;
 
     @Test
-    void whenIllegalArgumentException_shouldReturn400WithProblemDetail() throws Exception {
+    void handleIllegalArgument_shouldReturn400_whenIllegalArgumentExceptionIsThrown() throws Exception {
         when(helloUseCase.execute()).thenThrow(new IllegalArgumentException("Inválido input"));
 
         mockMvc.perform(get("/hello"))
@@ -40,7 +40,7 @@ class GlobalExceptionHandlerTest {
     }
 
     @Test
-    void whenUnexpectedException_shouldReturn500WithGenericMessage() throws Exception {
+    void handleGeneric_shouldReturn500_whenUnexpectedExceptionIsThrown() throws Exception {
         when(helloUseCase.execute()).thenThrow(new RuntimeException("Erro inesperado"));
 
         mockMvc.perform(get("/hello"))
