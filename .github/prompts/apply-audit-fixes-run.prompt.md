@@ -11,9 +11,21 @@ The skill file contains the source of truth references. Read it first.
 
 ## Audit Report
 
-{{AUDIT_REPORT}}
+**Auto-discovery:** The agent MUST scan `docs/audits/` for all `*.md` files, sort by
+filename date descending (convention: `project-audit-YYYY-MM-DD-HHmmss.md`), and select the
+most recent report.
 
-<!-- Replace {{AUDIT_REPORT}} with the audit content, or attach the file. -->
+**Pre-flight checks (agent MUST complete before proceeding):**
+
+1. List all files in `docs/audits/`.
+2. If the directory is empty or contains no `.md` files → **STOP**. Tell the user:
+   _"No audit reports found in `docs/audits/`. Generate one first with the project-audit skill."_
+3. Identify the most recent report by filename date.
+4. Present the selection to the user:
+   _"I found N report(s). The most recent is `docs/audits/<filename>` (<date>). Should I proceed with this report?"_
+5. **Wait for explicit user confirmation** before continuing to the Instructions.
+6. If the user selects a different report, use that one instead.
+7. Read the confirmed report in full before moving to Phase 1.
 
 ## Instructions
 
