@@ -1,3 +1,8 @@
+---
+name: project-audit
+description: "Perform a complete technical audit of this repository. Use when: periodic health check, pre-release validation, architecture review, or post-incident analysis. Multi-model strategy: Opus for planning, Haiku for execution, Sonnet for consolidation."
+---
+
 # Skill: project-audit
 
 > Performs a complete technical audit of this repository using a multi-model strategy.  

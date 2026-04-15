@@ -31,7 +31,7 @@ cd <repository-root>
 Open a new Copilot Chat in Agent mode and paste the full prompt from:
 
 ```
-.ai/prompts/project-audit-run.md
+.github/prompts/project-audit-run.prompt.md
 ```
 
 Use the fenced block labeled `## Prompt` — everything between the triple backticks.
@@ -74,7 +74,7 @@ To audit only one area, append to the prompt:
 — Scope this audit to the [Infrastructure & Docker] section only.
 ```
 
-Replace `[Infrastructure & Docker]` with any area name from the Stage 1 table in `.ai/skills/project-audit.md`.
+Replace `[Infrastructure & Docker]` with any area name from the Stage 1 table in `.github/skills/project-audit/SKILL.md`.
 
 ---
 
@@ -103,7 +103,7 @@ jobs:
 
       - name: Run project-audit skill
         # TODO: Replace with your organization's approved Claude API integration.
-        # Prompt source: .ai/prompts/project-audit-run.md
+        # Prompt source: .github/prompts/project-audit-run.prompt.md
         # Output target: docs/audits/audit-$(date +%F).md
         run: |
           echo "PLACEHOLDER — wire your Claude API integration here"
@@ -134,7 +134,7 @@ stage('AI Audit') {
         script {
             // TODO: Replace with your organization's approved Claude API wrapper.
             // Do NOT inline API keys or use raw curl in production pipelines.
-            // Example: sh "your-org-cli audit --prompt .ai/prompts/project-audit-run.md --output docs/audits/audit-${BUILD_NUMBER}.md"
+            // Example: sh "your-org-cli audit --prompt .github/prompts/project-audit-run.prompt.md --output docs/audits/audit-${BUILD_NUMBER}.md"
         }
     }
     post {
@@ -151,9 +151,9 @@ stage('AI Audit') {
 
 | File | Purpose |
 |------|---------|
-| `.ai/skills/project-audit.md` | Skill — stages, severity definitions, rules, report template |
-| `.ai/prompts/project-audit-run.md` | Prompt — copy-paste trigger; configurable with `Additional instruction:` modifiers |
-| `.ai/workflows/project-audit-workflow.md` | Workflow — when/how to run, CI/CD integration |
+| `.github/skills/project-audit/SKILL.md` | Skill — stages, severity definitions, rules, report template |
+| `.github/prompts/project-audit-run.prompt.md` | Prompt — copy-paste trigger; configurable with `Additional instruction:` modifiers |
+| `.github/docs/project-audit-workflow.md` | Workflow — when/how to run, CI/CD integration |
 
 ---
 
@@ -161,5 +161,5 @@ stage('AI Audit') {
 
 - Audit reports in `docs/audits/` must be reviewed by the tech lead before findings are closed.
 - Context violations must never be dismissed without updating the corresponding ADR in `docs/architecture.md` or DON'T in `docs/ai-context.md`.
-- When source-of-truth documents change, future audit runs automatically reflect updated constraints — no manual changes to `.ai/skills/project-audit.md` are needed.
+- When source-of-truth documents change, future audit runs automatically reflect updated constraints — no manual changes to `.github/skills/project-audit/SKILL.md` are needed.
 - If an ADR is changed, add a note to it with the audit date and ticket reference.
