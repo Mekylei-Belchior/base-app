@@ -105,11 +105,15 @@ Test             ─── ./gradlew test (JUnit 5 + JaCoCo)
    │
 Quality Gate     ─── ./gradlew jacocoTestCoverageVerification (mínimo 80% LINE)
    │
-Build & Push     ─── docker build (runtime-only, JAR pré-compilado)
-   │             ─── docker push → 192.168.0.106:5000
+Build            ─── docker build (runtime-only, JAR pré-compilado)
+   │             ─── docker tag
    │
-Security Scan    ─── Trivy (ghcr.io) via Docker, cache em volume 'trivy-cache'
+Security Scan    ─── Trivy (ghcr.io) via Docker socket, cache em volume 'trivy-cache'
+   │             ─── escaneia imagem local antes do push
    │             ─── falha em HIGH ou CRITICAL
+   │
+Push             ─── docker push → 192.168.0.106:5000
+   │             ─── somente após scan aprovado
    │
 [Approve Prod]   ─── input manual (apenas branch main)
    │
